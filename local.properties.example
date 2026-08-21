@@ -1,0 +1,14 @@
+# Copie este arquivo para "local.properties" (na mesma pasta) e preencha com os
+# valores reais. O arquivo "local.properties" NUNCA é enviado ao Git.
+
+# Caminho do seu Android SDK (o Android Studio costuma preencher isso sozinho).
+sdk.dir=C\:\\Users\\SEU_USUARIO\\AppData\\Local\\Android\\Sdk
+
+# Sua chave de API do Google AI Studio (aistudio.google.com), a que tem quota
+# ilimitada nos modelos "Live" de áudio.
+GEMINI_API_KEY=coloque_sua_chave_aqui
+
+# Chave da YouTube Data API v3 (console.cloud.google.com), usada para achar o vídeo certo e
+# tocar automaticamente quando ela pedir uma música. Opcional: sem ela, o app ainda funciona,
+# só que abre a busca do YouTube Music em vez de já tocar sozinho.
+YOUTUBE_API_KEY=coloque_sua_chave_aqui

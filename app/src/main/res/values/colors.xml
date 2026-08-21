@@ -1,0 +1,9 @@
+<resources>
+    <color name="background">#0B0B10</color>
+    <color name="on_background">#FFFFFF</color>
+
+    <color name="button_idle">#2E7D32</color>
+    <color name="button_listening">#1565C0</color>
+    <color name="button_speaking">#6A1B9A</color>
+    <color name="button_error">#C62828</color>
+</resources>
