@@ -1,4 +1,4 @@
-# Bela — assistente de voz pessoal para a minha mãe
+# Bela — assistente de voz particular
 
 App Android com a **Bela**, uma assistente de voz por IA (Gemini Live, áudio nativo), pensado
 para uma pessoa com deficiência visual: um único botão enorme na tela — ou **3 cliques rápidos
