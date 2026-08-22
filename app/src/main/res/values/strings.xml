@@ -1,22 +1,16 @@
 <resources>
     <string name="app_name">Bela</string>
 
-    <string name="status_idle">Toque no botão ou aperte o volume 3x e fale</string>
+    <string name="status_idle">Toque no botão e fale</string>
     <string name="status_connecting">Conectando…</string>
     <string name="status_listening">Ouvindo… toque para cancelar</string>
     <string name="status_thinking">Só um instante…</string>
     <string name="status_speaking">Respondendo… toque para cancelar</string>
     <string name="status_error">Deu um problema. Toque para tentar de novo</string>
 
-    <string name="button_idle_description">Toque duas vezes para falar com a Bela, ou aperte o volume 3 vezes</string>
+    <string name="button_idle_description">Toque duas vezes para falar com a Bela</string>
     <string name="button_active_description">Toque duas vezes para cancelar</string>
 
     <string name="permissions_rationale">Para funcionar, o app precisa de permissão de microfone (para ouvir você), contatos (para ligar para alguém quando você pedir) e telefone (para fazer a ligação).</string>
     <string name="permissions_denied">Sem essas permissões o assistente não consegue ouvir você ou ligar para ninguém. Abra as configurações do app para permitir.</string>
-
-    <string name="notification_channel_alert">Abrindo a Bela</string>
-    <string name="notification_alert_title">Abrindo a Bela…</string>
-    <string name="notification_alert_text">Toque aqui se ela não abrir sozinha.</string>
-
-    <string name="accessibility_service_description">Detecta 3 toques rápidos seguidos no botão de aumentar volume, em qualquer tela, para abrir a Bela e começar a ouvir. Não lê nem coleta nada da tela — só observa os botões físicos de volume.</string>
 </resources>

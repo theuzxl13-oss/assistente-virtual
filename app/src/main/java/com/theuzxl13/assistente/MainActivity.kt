@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.media.AudioManager
 import android.media.ToneGenerator
 import android.net.Uri
-import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.speech.tts.TextToSpeech
@@ -34,7 +33,7 @@ private enum class AssistantState { IDLE, CONNECTING, LISTENING, THINKING, SPEAK
 class MainActivity : AppCompatActivity(), GeminiLiveListener {
 
     companion object {
-        /** Ação usada pelo AssistantLauncher para abrir a Bela e já começar a falar. */
+        /** Ação usada pelo BelaTileService para abrir a Bela e já começar a falar. */
         const val ACTION_AUTO_START = "com.theuzxl13.assistente.ACTION_AUTO_START"
     }
 
@@ -50,17 +49,11 @@ class MainActivity : AppCompatActivity(), GeminiLiveListener {
 
     private var state = AssistantState.IDLE
 
-    private val requiredPermissions: Array<String> by lazy {
-        val permissions = mutableListOf(
-            Manifest.permission.RECORD_AUDIO,
-            Manifest.permission.CALL_PHONE,
-            Manifest.permission.READ_CONTACTS
-        )
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.POST_NOTIFICATIONS)
-        }
-        permissions.toTypedArray()
-    }
+    private val requiredPermissions: Array<String> = arrayOf(
+        Manifest.permission.RECORD_AUDIO,
+        Manifest.permission.CALL_PHONE,
+        Manifest.permission.READ_CONTACTS
+    )
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -97,54 +90,7 @@ class MainActivity : AppCompatActivity(), GeminiLiveListener {
         binding.talkButton.setOnClickListener { onButtonTapped() }
 
         ensurePermissions()
-        ensureOverlayPermission()
-        ensureAccessibilityServiceEnabled()
         handleIntent(intent)
-    }
-
-    /**
-     * "Aparecer sobre outros apps" não é uma permissão de runtime normal — precisa passar pela
-     * tela de configurações do sistema. Sem ela, os 3 cliques no volume só abrem a Bela sozinha
-     * quando o celular está bloqueado; com ela, abre sozinha em qualquer situação.
-     */
-    private fun ensureOverlayPermission() {
-        if (Settings.canDrawOverlays(this)) return
-        Snackbar.make(
-            binding.root,
-            "Para a Bela abrir sozinha (mesmo com a tela ligada), autorize 'Aparecer sobre outros apps'.",
-            Snackbar.LENGTH_INDEFINITE
-        )
-            .setAction("Autorizar") {
-                startActivity(
-                    Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))
-                )
-            }
-            .show()
-    }
-
-    /**
-     * O serviço de acessibilidade (3 cliques no volume) também precisa ser ativado manualmente
-     * pelo Android, numa tela própria de Acessibilidade — não é um popup de permissão comum.
-     */
-    private fun ensureAccessibilityServiceEnabled() {
-        if (isAccessibilityServiceEnabled()) return
-        Snackbar.make(
-            binding.root,
-            "Para ativar a Bela com 3 cliques no botão de aumentar volume (útil andando), " +
-                "ative o serviço de acessibilidade dela.",
-            Snackbar.LENGTH_INDEFINITE
-        )
-            .setAction("Ativar") {
-                startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
-            }
-            .show()
-    }
-
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val esperado = "$packageName/${VolumeButtonAccessibilityService::class.java.name}"
-        val ativos = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-            ?: return false
-        return ativos.split(':').any { it.equals(esperado, ignoreCase = true) }
     }
 
     override fun onNewIntent(intent: Intent) {

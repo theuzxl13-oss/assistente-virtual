@@ -1,9 +1,10 @@
 # Bela — assistente de voz particular 
 
 App Android com a **Bela**, uma assistente de voz por IA (Gemini Live, áudio nativo), pensado
-para uma pessoa com deficiência visual: um único botão enorme na tela — ou **3 cliques rápidos
-no botão de aumentar volume, de qualquer lugar** (mesmo com o app fechado ou o celular bloqueado)
-— ela ativa o assistente, fala o que precisa, e o app responde por voz. Também consegue:
+para uma pessoa com deficiência visual: um único botão enorme na tela — ou o **ladrilho da Bela
+nas Configurações Rápidas do Android**, acessível de qualquer lugar (até com a tela bloqueada,
+puxando a barra de notificações) — ela ativa o assistente, fala o que precisa, e o app responde
+por voz. Também consegue:
 
 - Tocar uma música/artista no **YouTube Music**, por pedido de voz.
 - **Ligar** para um contato da agenda, por pedido de voz (usando o nome da pessoa).
@@ -16,8 +17,8 @@ O app conecta direto (via WebSocket) na **Gemini Live API** usando a sua chave d
 Google AI Studio (a mesma que aparece no seu dashboard com quota ilimitada para os modelos de
 áudio "Live"). Não usa Firebase nem nenhuma chave intermediária — é a sua chave, direto.
 
-- Toque no botão (ou aperte o volume 3x) → o app grava o microfone e manda o áudio em tempo real
-  para o Gemini.
+- Toque no botão (ou no ladrilho das Configurações Rápidas) → o app grava o microfone e manda o
+  áudio em tempo real para o Gemini.
 - O próprio Gemini detecta quando você parou de falar e começa a responder em áudio (o app
   configura essa detecção — `realtimeInputConfig.automaticActivityDetection` em
   [`LiveMessages.kt`](app/src/main/java/com/theuzxl13/assistente/gemini/LiveMessages.kt) — pra
@@ -27,7 +28,7 @@ Google AI Studio (a mesma que aparece no seu dashboard com quota ilimitada para 
   só pra detectar essa palavra e avisar a Live API que pode responder (`audioStreamEnd`), o que
   deixa a resposta bem mais rápida quando você já sabe que terminou de falar.
 - Depois que a Bela termina de responder, a sessão se encerra — pra fazer outro pedido, é só
-  tocar no botão ou apertar o volume 3x de novo.
+  tocar no botão ou no ladrilho de novo.
 - Se você pedir para tocar uma música ou ligar para alguém, o Gemini "chama" uma função que o
   app implementa nativamente (abrir o YouTube Music / discar o telefone) — isso é feito com
   *function calling* da Live API.
@@ -37,34 +38,29 @@ Modelo usado por padrão: `gemini-2.5-flash-native-audio-preview-12-2025` (const
 Se no seu AI Studio aparecer outro nome de modelo Live que você prefira usar (ex: uma versão mais
 nova), é só trocar essa constante.
 
-## Ativar de qualquer lugar: 3 cliques no volume
+## Ativar de qualquer lugar: ladrilho nas Configurações Rápidas
 
-O [`VolumeButtonAccessibilityService`](app/src/main/java/com/theuzxl13/assistente/VolumeButtonAccessibilityService.kt)
-detecta **3 toques rápidos seguidos no botão de aumentar volume**, em qualquer lugar do sistema
-(app fechado, tela bloqueada, dentro de outro app), e abre a Bela automaticamente, já pronta pra
-ouvir.
+O [`BelaTileService`](app/src/main/java/com/theuzxl13/assistente/BelaTileService.kt) adiciona um
+ladrilho da Bela nas **Configurações Rápidas** do Android (o painel que abre puxando a barra de
+notificações duas vezes, ou uma vez já na tela de bloqueio) — toca nele de qualquer lugar do
+sistema e a Bela abre pronta pra ouvir.
 
-Isso só é possível usando um **Serviço de Acessibilidade** do Android — o mesmo tipo de permissão
-usada por leitores de tela como o TalkBack. Não dá pra ativar com um popup comum; é preciso ir
-manualmente em **Configurações → Acessibilidade → Bela** e ligar o interruptor (o app mostra um
-aviso na primeira abertura, com um botão "Ativar" que leva direto pra essa tela). O Android exibe
-um aviso padrão do sistema sobre o que serviços de acessibilidade podem fazer — nesse caso, o
-serviço só observa os botões físicos de volume, não lê nem coleta nada da tela.
+Pra aparecer lá, é preciso adicionar o ladrilho uma vez (puxa as Configurações Rápidas → ícone de
+lápis/editar → arrasta o ladrilho "Bela" pro painel) — é a forma padrão do Android de configurar
+qualquer ladrilho, sem precisar de nenhuma tela de permissão especial.
 
-O volume pode subir um pouquinho como efeito colateral dos 3 cliques (o app não bloqueia o
-funcionamento normal do botão) — é um efeito colateral aceitável em troca de não interferir no uso
-normal do volume.
+### Por que não usar chacoalhar, botão de volume ou sobreposição de tela
 
-Quando detecta os 3 cliques, o [`AssistantLauncher`](app/src/main/java/com/theuzxl13/assistente/AssistantLauncher.kt)
-tenta abrir a tela direto (se tiver a permissão "Aparecer sobre outros apps" — pedida na primeira
-abertura do app) ou, sem essa permissão, dispara uma notificação de **tela cheia** que abre
-sozinha quando o celular está bloqueado, mas exige um toque quando está desbloqueado (é uma
-proteção do próprio Android contra apps abrirem por cima de outros sem avisar).
+Versões anteriores deste app usaram um serviço de **Acessibilidade** (pra detectar cliques no
+volume) combinado com a permissão **"Aparecer sobre outros apps"** (`SYSTEM_ALERT_WINDOW`) pra
+abrir a tela sozinha de qualquer lugar. Essa combinação especificamente é a mesma "assinatura" de
+comportamento usada por trojans bancários Android (tipo BRata, PixPirate) pra roubar senha e fazer
+transferências — então os sistemas antifraude de apps de banco passaram a bloquear o próprio banco
+nesse celular, tratando a Bela como app suspeito.
 
-**Importante — configurações restritas (Android 13+):** como o app é instalado fora da Play
-Store, o Android pode bloquear por segurança a ativação do serviço de acessibilidade até você
-liberar manualmente em **Configurações → Apps → Bela → menu (⋮) → Permitir configurações
-restritas**.
+O ladrilho de Configurações Rápidas resolve isso porque é uma API do Android feita exatamente pra
+esse tipo de atalho, sem nenhuma permissão sensível — nada de acessibilidade, nada de sobreposição
+de tela, nada que pareça com malware bancário.
 
 ## Tocar a música automaticamente (YouTube Data API)
 
@@ -99,7 +95,7 @@ Como gerar a chave (gratuita, mesmo se você não tiver usado o Cloud Console an
 
 ### 1. Abrir o projeto
 
-Abra o Android Studio → **Open** → selecione a pasta `assistente-mae`.
+Abra o Android Studio → **Open** → selecione a pasta `assistente-virtual`.
 
 > O projeto não inclui o `gradlew`/`gradle-wrapper.jar` (são arquivos binários). Na primeira vez
 > que abrir, o Android Studio vai avisar algo como *"Gradle wrapper is missing"* — é só clicar em
@@ -135,24 +131,28 @@ Para instalar no celular dela:
 2. No celular dela, toque no arquivo `.apk` para instalar. O Android vai pedir para permitir
    "instalar apps de fontes desconhecidas" para o app usado para abrir o arquivo (Arquivos,
    WhatsApp, etc.) — autorize.
-3. Abra o app uma vez você mesmo para conceder as permissões (microfone, telefone, contatos,
-   notificações) e ativar "aparecer sobre outros apps" e o serviço de acessibilidade do volume
-   (nas Configurações do Android, seguindo os avisos que o app mostra), já que ela não vai
-   conseguir navegar nesses diálogos sem enxergar.
+3. Abra o app uma vez você mesmo para conceder as permissões (microfone, telefone, contatos), já
+   que ela não vai conseguir navegar nesses diálogos sem enxergar.
+4. Adicione o ladrilho da Bela nas Configurações Rápidas (puxa a barra de notificações duas
+   vezes → ícone de editar/lápis → arrasta "Bela" pro painel) — assim ela consegue ativar o
+   assistente de qualquer lugar sem precisar abrir o app manualmente.
 
 ## Ideias para depois (fora do escopo inicial)
 
 - Lembretes de remédio/rotina por voz.
 - Abrir o app automaticamente ao ligar o celular.
-- Detecção de palavra de ativação ("Ei, Bela"), em vez de precisar de um gesto/botão.
+- Virar o **assistente padrão do Android** (`VoiceInteractionService`), ativável segurando o botão
+  Home ou com o gesto de canto — é a forma mais "nativa" possível de disparar por voz (como o
+  Google Assistant), mas dá bem mais trabalho pra implementar que o ladrilho atual.
+- Ler mensagens do WhatsApp em voz alta (via acesso a notificações) e/ou abrir uma mensagem já
+  escrita pra ela confirmar o envio.
 
 ## Estrutura do código
 
 ```
 app/src/main/java/com/theuzxl13/assistente/
-  MainActivity.kt                     # tela única, estados do botão, orquestra tudo
-  AssistantLauncher.kt                # abre a Bela de fora (3 cliques no volume)
-  VolumeButtonAccessibilityService.kt # detecta 3 cliques no volume em qualquer lugar do sistema
+  MainActivity.kt              # tela única, estados do botão, orquestra tudo
+  BelaTileService.kt           # ladrilho das Configurações Rápidas pra ativar de qualquer lugar
   gemini/GeminiLiveClient.kt   # conexão WebSocket com a Live API
   gemini/LiveMessages.kt       # monta/interpreta as mensagens JSON da Live API
   audio/AudioCapture.kt        # microfone -> PCM 16kHz -> base64
