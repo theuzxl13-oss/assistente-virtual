@@ -100,7 +100,8 @@ class MainActivity : AppCompatActivity(), GeminiLiveListener {
     }
 
     private fun handleIntent(intent: Intent?) {
-        if (intent?.action != ACTION_AUTO_START) return
+        // ACTION_ASSIST chega quando a Bela é o assistente padrão e ela segura o botão de ligar.
+        if (intent?.action != ACTION_AUTO_START && intent?.action != Intent.ACTION_ASSIST) return
         setIntent(Intent()) // consome a ação, pra não repetir se a activity for recriada depois
         // Só inicia uma conversa nova; nunca cancela uma em andamento.
         if (state == AssistantState.IDLE || state == AssistantState.ERROR) {
@@ -261,8 +262,8 @@ class MainActivity : AppCompatActivity(), GeminiLiveListener {
             cancelWatchdog()
             audioPlayer?.stop()
             audioPlayer = null
-            // Encerra a sessão: pra pedir outra coisa, ela toca no botão ou aperta o volume 3x
-            // de novo — mais previsível do que deixar o microfone aberto sozinho.
+            // Encerra a sessão: pra pedir outra coisa, ela segura o botão de ligar, toca no botão
+            // ou no ladrilho de novo — mais previsível do que deixar o microfone aberto sozinho.
             playTone(ToneGenerator.TONE_PROP_BEEP2)
             setState(AssistantState.IDLE)
             client?.close()

@@ -49,6 +49,26 @@ Pra aparecer lá, é preciso adicionar o ladrilho uma vez (puxa as Configuraçõ
 lápis/editar → arrasta o ladrilho "Bela" pro painel) — é a forma padrão do Android de configurar
 qualquer ladrilho, sem precisar de nenhuma tela de permissão especial.
 
+## Ativar segurando o botão de ligar (assistente padrão)
+
+A Bela pode ser escolhida como **assistente digital padrão** do Android, no lugar do Google
+Assistente. Aí, **segurar o botão de ligar** abre a Bela já ouvindo — de qualquer lugar, até com a
+tela bloqueada. O app só declara que sabe responder ao pedido de assistente
+(`android.intent.action.ASSIST` no `AndroidManifest.xml`); não usa a versão de assistente que lê o
+conteúdo da tela, então não ganha nenhum acesso novo.
+
+Configuração, uma vez só (Moto G, Android 14/15):
+
+1. **Configurações → Apps → Apps padrão → Assistente digital** (ou "App assistente digital") →
+   escolha **Bela**.
+2. **Configurações → Sistema → Gestos → Pressionar e segurar o botão liga/desliga** (o nome pode
+   variar um pouco) → escolha **Assistente digital** em vez de "Menu liga/desliga". O menu de
+   desligar continua acessível apertando liga/desliga + aumentar volume juntos.
+
+Com a tela bloqueada, a Bela abre por cima da tela de bloqueio (`showWhenLocked`) pra ela não
+precisar desbloquear — o que também significa que dá pra pedir música ou ligação sem desbloquear,
+igual ao Google Assistente.
+
 ### Por que não usar chacoalhar, botão de volume ou sobreposição de tela
 
 Versões anteriores deste app usaram um serviço de **Acessibilidade** (pra detectar cliques no
