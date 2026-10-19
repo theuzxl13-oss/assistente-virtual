@@ -16,7 +16,7 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - uses: android-actions/setup-android@v3
+      # O runner ubuntu-latest já vem com o Android SDK instalado (variável ANDROID_HOME).
 
       - uses: gradle/actions/setup-gradle@v4
         with:
