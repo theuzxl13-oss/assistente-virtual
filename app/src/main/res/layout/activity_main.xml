@@ -1,44 +1,76 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<!--
+  Tela pensada para quem não enxerga: o botão principal ocupa quase toda a tela (qualquer toque
+  nele fala com a Bela ou interrompe), e os botões de apoio têm no mínimo 88dp de altura.
+  A ordem de foco do TalkBack segue a ordem visual: título, estado, Falar, Repetir, Ajuda.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background"
+    android:orientation="vertical"
+    android:padding="16dp"
     tools:context=".MainActivity">
 
     <TextView
-        android:id="@+id/statusText"
-        android:layout_width="0dp"
+        android:id="@+id/titleText"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginStart="32dp"
-        android:layout_marginTop="48dp"
-        android:layout_marginEnd="32dp"
+        android:accessibilityHeading="true"
         android:gravity="center"
+        android:text="@string/title_with_subtitle"
         android:textColor="@color/on_background"
-        android:textSize="26sp"
-        android:textStyle="bold"
+        android:textSize="22sp"
+        android:textStyle="bold" />
+
+    <TextView
+        android:id="@+id/statusText"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:gravity="center"
+        android:minHeight="48dp"
         android:text="@string/status_idle"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        android:textColor="@color/on_background"
+        android:textSize="24sp" />
 
     <Button
         android:id="@+id/talkButton"
-        android:layout_width="0dp"
+        android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_marginStart="40dp"
-        android:layout_marginTop="24dp"
-        android:layout_marginEnd="40dp"
-        android:layout_marginBottom="48dp"
-        android:background="@drawable/bg_circle_button"
-        android:contentDescription="@string/button_idle_description"
-        android:text=""
-        android:textSize="1sp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintDimensionRatio="1:1"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toBottomOf="@id/statusText" />
+        android:layout_marginTop="12dp"
+        android:layout_weight="1"
+        android:background="@drawable/bg_main_button"
+        android:text="@string/button_talk"
+        android:textAllCaps="false"
+        android:textColor="@color/on_background"
+        android:textSize="36sp"
+        android:textStyle="bold" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:orientation="horizontal">
+
+        <Button
+            android:id="@+id/repeatButton"
+            style="@style/SupportButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:layout_weight="1"
+            android:text="@string/button_repeat" />
+
+        <Button
+            android:id="@+id/helpButton"
+            style="@style/SupportButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:layout_weight="1"
+            android:text="@string/button_help" />
+    </LinearLayout>
+
+</LinearLayout>

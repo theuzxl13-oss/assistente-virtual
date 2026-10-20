@@ -1,16 +1,20 @@
 <resources>
     <string name="app_name">Bela</string>
+    <string name="title_with_subtitle">Bela, sua assistente para o dia a dia</string>
 
-    <string name="status_idle">Toque no botão e fale</string>
-    <string name="status_connecting">Conectando…</string>
-    <string name="status_listening">Ouvindo… toque para cancelar</string>
-    <string name="status_thinking">Só um instante…</string>
-    <string name="status_speaking">Respondendo… toque para cancelar</string>
+    <string name="status_idle">Toque na tela para falar com a Bela</string>
+    <string name="status_listening">Ouvindo… pode falar</string>
+    <string name="status_waiting">Esperando sua resposta</string>
+    <string name="status_thinking">Pensando…</string>
+    <string name="status_speaking">Falando… toque para interromper</string>
+    <string name="status_acting">Fazendo o que você pediu…</string>
     <string name="status_error">Deu um problema. Toque para tentar de novo</string>
 
-    <string name="button_idle_description">Toque duas vezes para falar com a Bela</string>
-    <string name="button_active_description">Toque duas vezes para cancelar</string>
+    <string name="button_talk">Falar com a Bela</string>
+    <string name="button_interrupt">Interromper</string>
+    <string name="button_repeat">Repetir</string>
+    <string name="button_help">Ajuda</string>
 
-    <string name="permissions_rationale">Para funcionar, o app precisa de permissão de microfone (para ouvir você), contatos (para ligar para alguém quando você pedir) e telefone (para fazer a ligação).</string>
-    <string name="permissions_denied">Sem essas permissões o assistente não consegue ouvir você ou ligar para ninguém. Abra as configurações do app para permitir.</string>
+    <string name="voice_missing">A voz em português não está instalada. Instale os \"Serviços de fala do Google\" e o idioma Português (Brasil) e abra a Bela de novo.</string>
+    <string name="share_label">Ler com a Bela</string>
 </resources>

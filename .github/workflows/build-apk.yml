@@ -38,11 +38,22 @@ jobs:
             echo "YOUTUBE_API_KEY=$YOUTUBE_API_KEY"
           } > local.properties
 
+      - name: Testes automatizados
+        run: gradle testDebugUnitTest --no-daemon
+
       - name: Compilar APK
         run: gradle assembleDebug --no-daemon
 
       - name: Renomear APK
         run: cp app/build/outputs/apk/debug/app-debug.apk Bela.apk
+
+      - name: Relatório dos testes
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: relatorio-testes
+          path: app/build/reports/tests/
+          retention-days: 7
 
       - uses: actions/upload-artifact@v4
         with:

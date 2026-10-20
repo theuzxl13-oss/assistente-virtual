@@ -1,96 +1,101 @@
 package com.theuzxl13.assistente
 
-import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
-import android.content.pm.PackageManager
+import android.media.AudioAttributes
+import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.media.ToneGenerator
-import android.net.Uri
 import android.os.Bundle
-import android.provider.Settings
 import android.speech.tts.TextToSpeech
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.snackbar.Snackbar
-import com.theuzxl13.assistente.audio.AudioCapture
-import com.theuzxl13.assistente.audio.AudioPlayer
+import com.theuzxl13.assistente.apps.AndroidApps
+import com.theuzxl13.assistente.contacts.AndroidContacts
 import com.theuzxl13.assistente.databinding.ActivityMainBinding
-import com.theuzxl13.assistente.gemini.FunctionCallRequest
-import com.theuzxl13.assistente.gemini.GeminiLiveClient
-import com.theuzxl13.assistente.gemini.GeminiLiveListener
-import com.theuzxl13.assistente.gemini.ParamSpec
-import com.theuzxl13.assistente.gemini.ToolDefinition
-import com.theuzxl13.assistente.tools.AssistantTools
+import com.theuzxl13.assistente.device.AndroidDevice
+import com.theuzxl13.assistente.domain.BelaIntent
+import com.theuzxl13.assistente.domain.ConversationEngine
+import com.theuzxl13.assistente.domain.ConversationState
+import com.theuzxl13.assistente.domain.Onboarding
+import com.theuzxl13.assistente.media.YouTubeMedia
+import com.theuzxl13.assistente.search.GeminiSearch
+import com.theuzxl13.assistente.settings.UserPreferences
+import com.theuzxl13.assistente.telephony.AndroidPhone
+import com.theuzxl13.assistente.voice.AndroidSpeechInput
+import com.theuzxl13.assistente.voice.AndroidSpeechOutput
+import com.theuzxl13.assistente.voice.ToneFeedback
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.json.JSONObject
 
-private enum class AssistantState { IDLE, CONNECTING, LISTENING, THINKING, SPEAKING, ERROR }
-
-class MainActivity : AppCompatActivity(), GeminiLiveListener {
+/**
+ * Tela única da Bela: um botão enorme "Falar com a Bela" (que também interrompe) e dois botões
+ * grandes de apoio, Repetir e Ajuda. Toda a informação importante também é falada.
+ */
+class MainActivity : AppCompatActivity() {
 
     companion object {
-        /** Ação usada pelo BelaTileService para abrir a Bela e já começar a falar. */
+        /** Usada pelo ladrilho das Configurações Rápidas para abrir a Bela já ouvindo. */
         const val ACTION_AUTO_START = "com.theuzxl13.assistente.ACTION_AUTO_START"
     }
 
     private lateinit var binding: ActivityMainBinding
-    private lateinit var tools: AssistantTools
-    private var toneGenerator: ToneGenerator? = null
-    private var tts: TextToSpeech? = null
+    private val permissions = ActivityPermissions(this)
 
-    private var client: GeminiLiveClient? = null
-    private var audioCapture: AudioCapture? = null
-    private var audioPlayer: AudioPlayer? = null
-    private var watchdogJob: Job? = null
+    private lateinit var prefs: UserPreferences
+    private lateinit var speech: AndroidSpeechOutput
+    private lateinit var input: AndroidSpeechInput
+    private lateinit var sounds: ToneFeedback
+    private lateinit var engine: ConversationEngine
+    private lateinit var onboarding: Onboarding
+    private lateinit var audioManager: AudioManager
 
-    private var state = AssistantState.IDLE
-
-    private val requiredPermissions: Array<String> = arrayOf(
-        Manifest.permission.RECORD_AUDIO,
-        Manifest.permission.CALL_PHONE,
-        Manifest.permission.READ_CONTACTS
-    )
-
-    private val permissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { results ->
-        if (results.values.all { it }) {
-            Snackbar.make(binding.root, "Tudo certo! Pode tocar no botão para falar.", Snackbar.LENGTH_LONG).show()
-        } else {
-            Snackbar.make(binding.root, getString(R.string.permissions_denied), Snackbar.LENGTH_INDEFINITE)
-                .setAction("Abrir configurações") { openAppSettings() }
-                .show()
-        }
-    }
+    private var session: Job? = null
+    private var currentState = ConversationState.INATIVA
+    private var focusRequest: AudioFocusRequest? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        tools = AssistantTools(applicationContext)
-        toneGenerator = try {
-            ToneGenerator(AudioManager.STREAM_MUSIC, 80)
-        } catch (_: RuntimeException) {
-            // Alguns aparelhos/emuladores não conseguem alocar o gerador de bipes; o app
-            // funciona normalmente sem esse feedback sonoro extra.
-            null
-        }
-        tts = TextToSpeech(this) { status ->
-            if (status == TextToSpeech.SUCCESS) {
-                tts?.language = java.util.Locale("pt", "BR")
+        audioManager = getSystemService(AudioManager::class.java)
+        prefs = UserPreferences(this)
+        speech = AndroidSpeechOutput(this, prefs.speechRate)
+        input = AndroidSpeechInput(this)
+        sounds = ToneFeedback()
+        val device = AndroidDevice(this)
+
+        engine = ConversationEngine(
+            speech = speech,
+            input = input,
+            sounds = sounds,
+            permissions = permissions,
+            contacts = AndroidContacts(this),
+            phone = AndroidPhone(this),
+            media = YouTubeMedia(this),
+            search = GeminiSearch(),
+            apps = AndroidApps(this),
+            device = device,
+            prefs = prefs
+        )
+        engine.onStateChanged = { state -> runOnUiThread { render(state) } }
+        onboarding = Onboarding(speech, input, sounds, permissions, device, prefs)
+        onboarding.onStateChanged = { state -> runOnUiThread { render(state) } }
+
+        binding.talkButton.setOnClickListener { toggleSession() }
+        binding.repeatButton.setOnClickListener { restartWith(BelaIntent.Repeat) }
+        binding.helpButton.setOnClickListener { restartWith(BelaIntent.Help) }
+        render(ConversationState.INATIVA)
+
+        lifecycleScope.launch {
+            if (!speech.awaitReady()) {
+                showVoiceMissing()
+                return@launch
             }
+            // Abrir a Bela já é um pedido para falar com ela.
+            if (savedInstanceState == null && !handleIntent(intent)) startSession()
         }
-
-        setState(AssistantState.IDLE)
-        binding.talkButton.setOnClickListener { onButtonTapped() }
-
-        ensurePermissions()
-        handleIntent(intent)
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -99,283 +104,113 @@ class MainActivity : AppCompatActivity(), GeminiLiveListener {
         handleIntent(intent)
     }
 
-    private fun handleIntent(intent: Intent?) {
-        // ACTION_ASSIST chega quando a Bela é o assistente padrão e ela segura o botão de ligar.
-        if (intent?.action != ACTION_AUTO_START && intent?.action != Intent.ACTION_ASSIST) return
-        setIntent(Intent()) // consome a ação, pra não repetir se a activity for recriada depois
-        // Só inicia uma conversa nova; nunca cancela uma em andamento.
-        if (state == AssistantState.IDLE || state == AssistantState.ERROR) {
-            startConversation()
-        }
-    }
-
-    private fun ensurePermissions() {
-        val missing = requiredPermissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (missing.isNotEmpty()) {
-            permissionLauncher.launch(missing.toTypedArray())
-        }
-    }
-
-    private fun openAppSettings() {
-        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-            data = Uri.fromParts("package", packageName, null)
-        }
-        startActivity(intent)
-    }
-
-    private fun onButtonTapped() {
-        when (state) {
-            AssistantState.IDLE, AssistantState.ERROR -> startConversation()
-            else -> cancelConversation()
-        }
-    }
-
-    private fun startConversation() {
-        val missing = requiredPermissions.any {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-        if (missing) {
-            ensurePermissions()
-            return
-        }
-
-        if (BuildConfig.GEMINI_API_KEY.isBlank()) {
-            setState(AssistantState.ERROR)
-            Snackbar.make(
-                binding.root,
-                "Falta configurar a chave do Gemini em local.properties.",
-                Snackbar.LENGTH_INDEFINITE
-            ).show()
-            return
-        }
-
-        setState(AssistantState.CONNECTING)
-        playTone(ToneGenerator.TONE_PROP_BEEP)
-
-        val newClient = GeminiLiveClient(BuildConfig.GEMINI_API_KEY, this)
-        client = newClient
-        newClient.connect(systemInstructionText(), assistantTools())
-    }
-
-    private fun cancelConversation() {
-        cancelWatchdog()
-        audioCapture?.stop()
-        audioCapture = null
-        audioPlayer?.stop()
-        audioPlayer = null
-        client?.close()
-        client = null
-        setState(AssistantState.IDLE)
-    }
-
-    // ---- GeminiLiveListener ----
-
-    override fun onConnected() {
-        runOnUiThread {
-            playTone(ToneGenerator.TONE_PROP_ACK)
-            startListening()
-        }
-    }
-
-    /** Volta a gravar e ouvir o microfone. Usado tanto ao conectar quanto entre um pedido e outro. */
-    private fun startListening() {
-        setState(AssistantState.LISTENING)
-        val capture = AudioCapture(
-            onChunk = { chunk -> client?.sendAudioChunk(chunk) },
-            onError = { onError("Não consegui acessar o microfone.") }
-        )
-        audioCapture = capture
-        capture.start()
-    }
-
-    override fun onAudioChunk(base64Pcm24k: String) {
-        runOnUiThread {
-            cancelWatchdog()
-            if (state != AssistantState.SPEAKING) {
-                audioCapture?.stop()
-                audioCapture = null
-                setState(AssistantState.SPEAKING)
-                val player = AudioPlayer()
-                player.start()
-                audioPlayer = player
+    /** Trata ladrilho, botão de ligar (assistente) e "Compartilhar". Retorna true se tratou. */
+    private fun handleIntent(intent: Intent?): Boolean {
+        when (intent?.action) {
+            ACTION_AUTO_START, Intent.ACTION_ASSIST -> {
+                setIntent(Intent())
+                if (session?.isActive != true) startSession()
+                return true
             }
-            audioPlayer?.playChunk(base64Pcm24k)
-        }
-    }
-
-    override fun onSpeechInputComplete() {
-        // Ela disse "por favor": já avisamos o servidor pra responder, então para de gravar
-        // agora (senão continuaríamos mandando áudio depois de já ter avisado que acabou).
-        runOnUiThread {
-            audioCapture?.stop()
-            audioCapture = null
-            setState(AssistantState.THINKING)
-            startWatchdog()
-        }
-    }
-
-    /**
-     * Rede de segurança: se, por qualquer motivo, a Bela não responder depois de avisarmos que
-     * ela pode falar (gatilho "por favor"), cancela e avisa o erro em vez de ficar travada pra
-     * sempre em "Só um instante..." sem ela ter como saber o que aconteceu.
-     */
-    private fun startWatchdog() {
-        watchdogJob?.cancel()
-        watchdogJob = lifecycleScope.launch {
-            delay(20_000)
-            onError("A Bela demorou demais para responder.")
-        }
-    }
-
-    private fun cancelWatchdog() {
-        watchdogJob?.cancel()
-        watchdogJob = null
-    }
-
-    override fun onToolCall(calls: List<FunctionCallRequest>) {
-        // Tudo isso roda em sequência no dispatcher principal: o microfone precisa estar
-        // realmente parado ANTES de respondermos a chamada de função (senão o app pode continuar
-        // mandando áudio pro meio de uma chamada já respondida), e tocarMusica pode envolver uma
-        // busca de rede (suspend), por isso o lifecycleScope em vez de um runOnUiThread comum.
-        lifecycleScope.launch {
-            cancelWatchdog()
-            audioCapture?.stop()
-            audioCapture = null
-            setState(AssistantState.THINKING)
-
-            for (call in calls) {
-                val result = when (call.name) {
-                    "tocar_musica" -> tools.tocarMusica(call.args.optString("busca"))
-                    "ligar_para" -> tools.ligarPara(call.args.optString("nome_contato"))
-                    else -> JSONObject().put("sucesso", false).put("mensagem", "Ferramenta desconhecida.")
+            Intent.ACTION_SEND -> {
+                val text = intent.getStringExtra(Intent.EXTRA_TEXT)
+                setIntent(Intent())
+                if (!text.isNullOrBlank()) {
+                    engine.sharedText = text
+                    restartWith(BelaIntent.ReadShared)
+                    return true
                 }
-                client?.sendToolResponse(call.id, call.name, result)
             }
-            startWatchdog()
+        }
+        return false
+    }
+
+    private fun toggleSession() {
+        if (session?.isActive == true) {
+            session?.cancel()
+        } else {
+            startSession()
         }
     }
 
-    override fun onTurnComplete() {
-        runOnUiThread {
-            cancelWatchdog()
-            audioPlayer?.stop()
-            audioPlayer = null
-            // Encerra a sessão: pra pedir outra coisa, ela segura o botão de ligar, toca no botão
-            // ou no ladrilho de novo — mais previsível do que deixar o microfone aberto sozinho.
-            playTone(ToneGenerator.TONE_PROP_BEEP2)
-            setState(AssistantState.IDLE)
-            client?.close()
-            client = null
-        }
+    private fun restartWith(start: BelaIntent) {
+        session?.cancel()
+        startSession(start)
     }
 
-    override fun onInterrupted() {
-        runOnUiThread {
-            audioPlayer?.stop()
-            audioPlayer = null
-        }
-    }
-
-    override fun onError(message: String) {
-        runOnUiThread {
-            cancelConversation()
-            setState(AssistantState.ERROR)
-            Snackbar.make(binding.root, "Erro: $message", Snackbar.LENGTH_LONG).show()
-            // A tela sozinha não serve pra ela — o erro precisa ser falado em voz alta.
-            tts?.speak(
-                "Desculpa, deu um problema. Toque no botão e tente de novo.",
-                TextToSpeech.QUEUE_FLUSH,
-                null,
-                "erro"
-            )
-        }
-    }
-
-    override fun onClosed() {
-        runOnUiThread {
-            cancelWatchdog()
-            if (state != AssistantState.IDLE) {
-                setState(AssistantState.IDLE)
+    private fun startSession(start: BelaIntent? = null) {
+        val previous = session
+        session = lifecycleScope.launch {
+            previous?.join()
+            requestAudioFocus()
+            try {
+                if (!prefs.onboardingDone) onboarding.run() else engine.runSession(start)
+            } finally {
+                abandonAudioFocus()
             }
         }
     }
 
-    // ---- Estado / UI ----
-
-    private fun setState(newState: AssistantState) {
-        state = newState
-        val (colorRes, statusRes) = when (newState) {
-            AssistantState.IDLE -> R.color.button_idle to R.string.status_idle
-            AssistantState.CONNECTING -> R.color.button_listening to R.string.status_connecting
-            AssistantState.LISTENING -> R.color.button_listening to R.string.status_listening
-            AssistantState.THINKING -> R.color.button_speaking to R.string.status_thinking
-            AssistantState.SPEAKING -> R.color.button_speaking to R.string.status_speaking
-            AssistantState.ERROR -> R.color.button_error to R.string.status_error
-        }
-        binding.talkButton.backgroundTintList = ContextCompat.getColorStateList(this, colorRes)
-        binding.statusText.setText(statusRes)
-        binding.talkButton.contentDescription = getString(
-            if (newState == AssistantState.IDLE || newState == AssistantState.ERROR) {
-                R.string.button_idle_description
-            } else {
-                R.string.button_active_description
-            }
-        )
-    }
-
-    private fun playTone(tone: Int) {
-        try {
-            toneGenerator?.startTone(tone, 150)
-        } catch (_: Exception) {
-            // som é só um feedback extra, não precisa travar o app se falhar
+    override fun onStop() {
+        super.onStop()
+        // Microfone não fica aberto com a Bela fora da tela. Ações em andamento (verificar se a
+        // ligação começou, avisar se o vídeo não tocou) continuam.
+        if (currentState == ConversationState.OUVINDO || currentState == ConversationState.AGUARDANDO_CONFIRMACAO) {
+            session?.cancel()
         }
     }
-
-    private fun assistantTools(): List<ToolDefinition> = listOf(
-        ToolDefinition(
-            name = "tocar_musica",
-            description = "Toca uma música, artista ou playlist no YouTube Music.",
-            parameters = mapOf(
-                "busca" to ParamSpec(
-                    "STRING",
-                    "O que buscar e tocar, por exemplo o nome da música ou do artista."
-                )
-            ),
-            required = listOf("busca")
-        ),
-        ToolDefinition(
-            name = "ligar_para",
-            description = "Liga para um contato da agenda de telefone pelo nome.",
-            parameters = mapOf(
-                "nome_contato" to ParamSpec(
-                    "STRING",
-                    "O nome (ou parte do nome) do contato para ligar."
-                )
-            ),
-            required = listOf("nome_contato")
-        )
-    )
-
-    private fun systemInstructionText(): String = """
-        Seu nome é Bela. Você é uma assistente de voz simpática e paciente, falando em português do Brasil
-        com uma senhora que tem deficiência visual. Ela não consegue ver a tela do celular, então:
-        - Quando ela perguntar seu nome ou pedir para você se apresentar, diga que você é a Bela.
-        - Fale de forma clara, calma e objetiva. Evite respostas longas.
-        - Nunca peça para ela "olhar", "ver" ou "tocar em algo na tela".
-        - Se ela pedir para tocar uma música, use a ferramenta tocar_musica.
-        - Se ela pedir para ligar para alguém, use a ferramenta ligar_para. Se a ferramenta disser que
-          encontrou mais de um contato parecido, pergunte a ela qual das pessoas ela quer, pelo nome completo.
-        - Se a ferramenta disser que não encontrou o contato, avise ela e pergunte se quer tentar outro nome.
-        - Trate-a com respeito e carinho, como alguém falaria com a própria mãe.
-    """.trimIndent()
 
     override fun onDestroy() {
         super.onDestroy()
-        cancelConversation()
-        toneGenerator?.release()
-        tts?.stop()
-        tts?.shutdown()
+        session?.cancel()
+        input.destroy()
+        speech.shutdown()
+        sounds.release()
+    }
+
+    /** Pausa a música enquanto a Bela fala/ouve; o player retoma sozinho quando ela termina. */
+    private fun requestAudioFocus() {
+        val request = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                    .build()
+            )
+            .build()
+        focusRequest = request
+        audioManager.requestAudioFocus(request)
+    }
+
+    private fun abandonAudioFocus() {
+        focusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        focusRequest = null
+    }
+
+    private fun render(state: ConversationState) {
+        currentState = state
+        val (colorRes, statusRes) = when (state) {
+            ConversationState.INATIVA, ConversationState.CANCELADA -> R.color.button_idle to R.string.status_idle
+            ConversationState.OUVINDO -> R.color.button_listening to R.string.status_listening
+            ConversationState.AGUARDANDO_CONFIRMACAO -> R.color.button_listening to R.string.status_waiting
+            ConversationState.PROCESSANDO -> R.color.button_speaking to R.string.status_thinking
+            ConversationState.FALANDO -> R.color.button_speaking to R.string.status_speaking
+            ConversationState.EXECUTANDO_ACAO -> R.color.button_speaking to R.string.status_acting
+            ConversationState.ERRO -> R.color.button_error to R.string.status_error
+        }
+        val idle = state == ConversationState.INATIVA || state == ConversationState.CANCELADA || state == ConversationState.ERRO
+        binding.talkButton.backgroundTintList = ContextCompat.getColorStateList(this, colorRes)
+        binding.talkButton.setText(if (idle) R.string.button_talk else R.string.button_interrupt)
+        binding.statusText.setText(statusRes)
+    }
+
+    private fun showVoiceMissing() {
+        binding.statusText.setText(R.string.voice_missing)
+        sounds.error()
+        try {
+            startActivity(Intent(TextToSpeech.Engine.ACTION_INSTALL_TTS_DATA))
+        } catch (_: ActivityNotFoundException) {
+            // Sem instalador de voz: a mensagem na tela orienta quem estiver ajudando.
+        }
     }
 }

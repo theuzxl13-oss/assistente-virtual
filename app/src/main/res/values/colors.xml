@@ -6,4 +6,5 @@
     <color name="button_listening">#1565C0</color>
     <color name="button_speaking">#6A1B9A</color>
     <color name="button_error">#C62828</color>
+    <color name="support_button">#37474F</color>
 </resources>

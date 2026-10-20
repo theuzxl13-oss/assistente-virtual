@@ -23,8 +23,8 @@ android {
         applicationId = "com.theuzxl13.assistente"
         minSdk = 26
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "2.0"
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
         buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeApiKey\"")
@@ -62,4 +62,9 @@ dependencies {
 
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.8.1")
+    // org.json real: a versão do android.jar em testes de JVM só tem stubs.
+    testImplementation("org.json:json:20240303")
 }
