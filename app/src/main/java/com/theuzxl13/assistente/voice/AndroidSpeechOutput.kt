@@ -58,13 +58,10 @@ class AndroidSpeechOutput(context: Context, initialRate: Float) : SpeechOutput {
     /** true se existe voz em português do Brasil pronta para uso. */
     suspend fun awaitReady(): Boolean = ready.await()
 
-    /** true se a voz escolhida depende de internet (as locais são preferidas). */
-    fun usesNetworkVoice(): Boolean = runCatching { tts.voice?.isNetworkConnectionRequired == true }.getOrDefault(false)
-
     private fun chooseBestVoice() {
         val voices: Set<Voice> = runCatching { tts.voices }.getOrNull() ?: return
         val best = voices
-            .filter { it.locale == ptBr && !it.isNetworkConnectionRequired && Voice.FEATURE_NOT_INSTALLED !in it.features }
+            .filter { it.locale == ptBr && !it.isNetworkConnectionRequired && TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED !in it.features }
             .maxByOrNull { it.quality }
         if (best != null) tts.voice = best
     }
