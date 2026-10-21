@@ -5,6 +5,7 @@ import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
+import android.net.Uri
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Build
@@ -17,11 +18,23 @@ class AndroidDevice(private val context: Context) : DevicePort {
 
     private val audio = context.getSystemService(AudioManager::class.java)
 
+    /**
+     * Só diz "sem internet" quando não há nenhuma rede com acesso à internet. Não exige
+     * NET_CAPABILITY_VALIDATED: essa checagem do Android falha em algumas redes (DNS privado,
+     * operadoras, Wi-Fi com filtro) mesmo com a internet funcionando, e fazia a Bela desistir sem
+     * tentar. Quem decide se a rede funciona é a própria chamada ao serviço.
+     */
     override fun isOnline(): Boolean {
         val connectivity = context.getSystemService(ConnectivityManager::class.java) ?: return false
         val capabilities = connectivity.getNetworkCapabilities(connectivity.activeNetwork) ?: return false
-        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) &&
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    override fun openUrl(url: String): Boolean = try {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        true
+    } catch (_: ActivityNotFoundException) {
+        false
     }
 
     override fun raiseVolume(): Int = adjust(AudioManager.ADJUST_RAISE)

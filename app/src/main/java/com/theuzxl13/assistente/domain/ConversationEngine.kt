@@ -51,6 +51,8 @@ class ConversationEngine(
     private var pending: Pending? = null
     private val history = mutableListOf<Turn>()
     private var lastMedia: MediaList? = null
+    /** Última pesquisa, para "próximo resultado", "abra no navegador" e "tente de novo". */
+    private var lastSearch: SearchSession? = null
 
     private sealed class Pending(val question: String) {
         class ConfirmCall(val contact: Contact, question: String) : Pending(question)
@@ -60,11 +62,17 @@ class ConversationEngine(
         class AskMediaQuery(question: String) : Pending(question)
         class ChooseApp(val options: List<InstalledApp>, question: String) : Pending(question)
         class ConfirmAnswer(question: String) : Pending(question)
-        class MoreDetails(val details: String, question: String) : Pending(question)
+        class SearchResults(val search: SearchSession, question: String) : Pending(question)
+        class SearchFailed(val spokenQuestion: String, question: String) : Pending(question)
         class ContinueReading(val remaining: String, question: String) : Pending(question)
     }
 
     private class MediaList(val items: List<MediaItem>, var batchStart: Int = 0, var playedIndex: Int = -1)
+
+    /** Resultados de uma pesquisa e qual deles está sendo lido. */
+    private class SearchSession(val spokenQuestion: String, val answer: Answer, var index: Int = 0, var detailsRead: Boolean = false) {
+        val current: WebResult? get() = answer.results.getOrNull(index)
+    }
 
     private enum class Next { LISTEN, END }
 
@@ -237,10 +245,19 @@ class ConversationEngine(
                 else -> { pending = null; dispatch(intent) }
             }
 
-            is Pending.MoreDetails -> when (intent) {
-                BelaIntent.Yes -> { pending = null; say(waiting.details); Next.LISTEN }
-                BelaIntent.No -> { pending = null; say("Tudo bem."); Next.LISTEN }
+            is Pending.SearchResults -> when (intent) {
+                BelaIntent.Yes, BelaIntent.Details -> { pending = null; readSearchDetails(waiting.search) }
+                BelaIntent.Another, BelaIntent.NextMedia -> { pending = null; readNextResult(waiting.search) }
+                BelaIntent.OpenInBrowser -> { pending = null; openSearchInBrowser(waiting.search) }
+                BelaIntent.No -> { pending = null; say("Tudo bem. Se quiser, faça outra pergunta."); Next.LISTEN }
                 else -> { pending = null; dispatch(intent) } // pergunta de acompanhamento
+            }
+
+            is Pending.SearchFailed -> when (intent) {
+                BelaIntent.Yes, BelaIntent.Retry -> { pending = null; answerQuestion(waiting.spokenQuestion) }
+                BelaIntent.OpenInBrowser -> { pending = null; openWebSearch(waiting.spokenQuestion) }
+                BelaIntent.No -> { pending = null; say("Tudo bem."); Next.END }
+                else -> { pending = null; dispatch(intent) }
             }
 
             is Pending.ContinueReading -> when (intent) {
@@ -272,6 +289,12 @@ class ConversationEngine(
             Next.LISTEN
         }
         BelaIntent.Another -> playAnother()
+        BelaIntent.Details -> lastSearch?.let { readSearchDetails(it) }
+            ?: run { say("Não tenho nada para detalhar agora. O que você quer saber?"); Next.LISTEN }
+        BelaIntent.OpenInBrowser -> lastSearch?.let { openSearchInBrowser(it) }
+            ?: run { say("Ainda não fiz nenhuma pesquisa para abrir. O que você quer pesquisar?"); Next.LISTEN }
+        BelaIntent.Retry -> lastSearch?.let { answerQuestion(it.spokenQuestion) }
+            ?: run { say("O que você quer que eu tente de novo?"); Next.LISTEN }
 
         is BelaIntent.Call -> startCall(intent.name)
         BelaIntent.CallWithoutName -> ask(Pending.AskCallName("Para quem você quer ligar?"))
@@ -666,30 +689,118 @@ class ConversationEngine(
     private suspend fun answerQuestion(question: String): Next {
         if (!device.isOnline()) {
             say(
-                "Para responder isso eu preciso de internet, e o celular parece estar sem conexão. " +
+                "Para pesquisar eu preciso de internet, e o celular não está conectado a nenhuma rede agora. " +
                     "Sem internet, eu ainda posso dizer as horas, fazer ligações e abrir aplicativos."
             )
             return Next.END
         }
-        say("Deixa eu ver.")
+        say("Vou pesquisar. Só um instante.")
         setState(ConversationState.PROCESSANDO)
         return when (val result = search.ask(question, history.takeLast(HISTORY_TURNS))) {
             is SearchResult.Success -> {
-                val answer = result.answer
-                history += Turn(question, answer.summary)
-                val source = answer.sources.firstOrNull()
-                    ?.let { " A informação é de ${it.title}." }
-                    ?: " Essa resposta não veio de uma fonte que eu tenha conferido."
-                say(answer.summary + source)
-                if (answer.details.isNotBlank()) {
-                    ask(Pending.MoreDetails(answer.details, "Quer ouvir mais detalhes?"))
-                } else {
-                    Next.LISTEN
-                }
+                val session = SearchSession(question, result.answer)
+                lastSearch = session
+                history += Turn(question, result.answer.summary)
+                say(firstReading(result.answer))
+                ask(Pending.SearchResults(session, followUpQuestion(session)))
             }
-            SearchResult.NotConfigured -> { say("A pesquisa na internet ainda não foi configurada neste aplicativo."); Next.END }
-            SearchResult.Failure -> fail("Não consegui pesquisar agora. Pode ser a internet. Tente de novo daqui a pouco.")
+            SearchResult.NotConfigured -> searchFailed(
+                question,
+                "O serviço de pesquisa precisa ser configurado neste aplicativo.",
+                allowRetry = false
+            )
+            is SearchResult.Failure -> searchFailed(question, errorMessage(result.error), allowRetry = result.error.retryable)
         }
+    }
+
+    private fun firstReading(answer: Answer): String = when (answer.provider) {
+        SearchProvider.GEMINI -> {
+            val source = answer.sources.firstOrNull()
+                ?.let { " A informação é de ${it.title}." }
+                ?: " Essa resposta não veio de uma fonte que eu tenha conferido."
+            answer.summary + source
+        }
+        SearchProvider.WIKIPEDIA -> {
+            val title = answer.results.firstOrNull()?.title
+            "Encontrei na Wikipédia" + (title?.let { ", em $it" } ?: "") + ". " + answer.summary
+        }
+        SearchProvider.NEWS -> {
+            val first = answer.results.first()
+            "Estas são notícias do Google Notícias. A primeira: ${first.title}" +
+                (if (first.site.isNotBlank()) ", de ${first.site}." else ".")
+        }
+    }
+
+    private fun followUpQuestion(session: SearchSession): String {
+        val options = mutableListOf<String>()
+        if (!session.detailsRead && session.answer.details.isNotBlank()) options += "mais detalhes"
+        if (session.index + 1 < session.answer.results.size) {
+            options += if (session.answer.provider == SearchProvider.NEWS) "a próxima notícia" else "o próximo resultado"
+        }
+        if (session.current?.url?.isNotBlank() == true) options += "abrir no navegador"
+        if (options.isEmpty()) return "Quer perguntar mais alguma coisa?"
+        return "Quer ouvir ${PtBr.joinSpoken(options).replace(" e abrir", ", ou abrir").replace(" e ", " ou ")}?"
+    }
+
+    private suspend fun readSearchDetails(session: SearchSession): Next {
+        val details = session.answer.details
+        val snippet = session.current?.snippet.orEmpty()
+        when {
+            details.isNotBlank() && !session.detailsRead -> {
+                session.detailsRead = true
+                val (chunk, rest) = splitChunk(details, READ_CHUNK_CHARS)
+                if (rest.isNotBlank()) return readChunked(details)
+                say(chunk)
+            }
+            snippet.isNotBlank() -> say(snippet)
+            else -> say("Não tenho mais detalhes desse resultado. Posso abrir a página no navegador, para o TalkBack ler.")
+        }
+        return ask(Pending.SearchResults(session, followUpQuestion(session)))
+    }
+
+    private suspend fun readNextResult(session: SearchSession): Next {
+        if (session.index + 1 >= session.answer.results.size) {
+            say("Não tenho mais resultados para essa pesquisa.")
+            return ask(Pending.SearchResults(session, followUpQuestion(session)))
+        }
+        session.index++
+        session.detailsRead = true // detalhes longos eram do primeiro resultado
+        val result = session.current!!
+        val label = if (session.answer.provider == SearchProvider.NEWS) "Próxima notícia" else "Resultado ${session.index + 1}"
+        val from = if (result.site.isNotBlank() && result.site != result.title) ", de ${result.site}" else ""
+        val snippet = if (session.answer.provider == SearchProvider.NEWS || result.snippet.isBlank()) "" else " ${result.snippet}"
+        say("$label: ${result.title}$from.$snippet")
+        return ask(Pending.SearchResults(session, followUpQuestion(session)))
+    }
+
+    private suspend fun openSearchInBrowser(session: SearchSession): Next {
+        val url = session.current?.url
+        if (url.isNullOrBlank()) return openWebSearch(session.spokenQuestion)
+        say("Vou abrir a página no navegador. Para voltar a falar comigo, toque na tela da Bela ou segure o botão de ligar.")
+        if (!device.openUrl(url)) return fail("Não consegui abrir o navegador.")
+        return Next.END
+    }
+
+    /** Alternativa quando a pesquisa falha: os resultados aparecem no navegador (não foram lidos pela Bela). */
+    private suspend fun openWebSearch(spokenQuestion: String): Next {
+        val query = SearchQuery.from(spokenQuestion).question
+        say(
+            "Vou abrir a pesquisa do Google no navegador. Os resultados vão aparecer na tela; eu não li esses resultados, " +
+                "mas o TalkBack pode ler para você."
+        )
+        if (!device.openUrl(googleSearchUrl(query))) return fail("Não consegui abrir o navegador.")
+        return Next.END
+    }
+
+    private suspend fun searchFailed(question: String, message: String, allowRetry: Boolean): Next {
+        sounds.error()
+        val offer = if (allowRetry) {
+            "Quer que eu tente de novo, ou que eu abra a pesquisa no navegador?"
+        } else {
+            "Quer que eu abra a pesquisa no navegador?"
+        }
+        say(message)
+        return ask(Pending.SearchFailed(question, offer))
     }
 
     // ------------------------------------------------------------------ utilidades
@@ -761,6 +872,30 @@ class ConversationEngine(
                 "tocar músicas e louvores do YouTube; pesquisar na internet e ler a resposta; dizer as horas e a data; " +
                 "abrir aplicativos; aumentar ou diminuir o volume; e ler textos que você compartilhar comigo. " +
                 "Também posso repetir, falar mais devagar ou mais rápido. O que você quer fazer?"
+
+        /** Mensagem falada para cada erro real da pesquisa. */
+        internal fun errorMessage(error: SearchError): String = when (error) {
+            SearchError.NO_CONNECTION -> "Não consegui me conectar ao serviço de pesquisa. A internet do celular parece estar fora do ar."
+            SearchError.DNS -> "Não consegui encontrar o endereço do serviço de pesquisa. Pode ser a rede ou o DNS do celular."
+            SearchError.TIMEOUT -> "A pesquisa demorou demais."
+            SearchError.UNAUTHORIZED -> "O serviço de pesquisa recusou a chave de acesso do aplicativo. A chave precisa ser conferida."
+            SearchError.MODEL_UNAVAILABLE -> "O serviço de pesquisa configurado não está mais disponível para esta chave. O aplicativo precisa ser atualizado."
+            SearchError.RATE_LIMITED -> "O limite de pesquisas do serviço foi atingido. Daqui a pouco deve voltar a funcionar."
+            SearchError.SERVER -> "O serviço de pesquisa está com problemas agora."
+            SearchError.BAD_REQUEST -> "O serviço de pesquisa não aceitou o pedido."
+            SearchError.EMPTY -> "Não encontrei resultados para essa pergunta."
+            SearchError.INVALID_RESPONSE -> "O serviço de pesquisa respondeu de um jeito que eu não entendi."
+            SearchError.UNEXPECTED -> "Aconteceu um erro inesperado na pesquisa."
+        }
+
+        internal val SearchError.retryable: Boolean
+            get() = this in setOf(
+                SearchError.NO_CONNECTION, SearchError.DNS, SearchError.TIMEOUT, SearchError.RATE_LIMITED,
+                SearchError.SERVER, SearchError.EMPTY, SearchError.INVALID_RESPONSE, SearchError.UNEXPECTED
+            )
+
+        internal fun googleSearchUrl(query: String): String =
+            "https://www.google.com/search?hl=pt-BR&q=" + java.net.URLEncoder.encode(query, "UTF-8")
 
         /** Divide no fim de uma frase perto de [limit] caracteres. */
         internal fun splitChunk(text: String, limit: Int): Pair<String, String> {

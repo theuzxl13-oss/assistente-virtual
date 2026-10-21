@@ -98,12 +98,48 @@ interface MediaPort {
 
 data class Source(val title: String, val uri: String)
 
-data class Answer(val summary: String, val details: String, val sources: List<Source>)
+/** Um resultado de pesquisa de verdade: título, trecho, endereço e nome do site. */
+data class WebResult(val title: String, val snippet: String, val url: String, val site: String)
+
+enum class SearchProvider(val spokenName: String) {
+    GEMINI("Pesquisa Google"),
+    WIKIPEDIA("Wikipédia"),
+    NEWS("Google Notícias")
+}
+
+/**
+ * @param summary o que a Bela fala primeiro (curto).
+ * @param details leitura completa, oferecida depois.
+ * @param sources sites usados pela resposta (para citar a fonte).
+ * @param results lista de resultados para "próximo resultado" (pode ser vazia).
+ */
+data class Answer(
+    val summary: String,
+    val details: String,
+    val sources: List<Source>,
+    val results: List<WebResult> = emptyList(),
+    val provider: SearchProvider = SearchProvider.GEMINI
+)
+
+/** Motivo real de uma falha de pesquisa, para a Bela falar a mensagem certa. */
+enum class SearchError {
+    NO_CONNECTION,      // sem rede / conexão recusada
+    TIMEOUT,            // demorou demais
+    DNS,                // não achou o endereço do serviço
+    UNAUTHORIZED,       // chave inválida, restrita ou sem permissão (HTTP 400 de chave, 401, 403)
+    MODEL_UNAVAILABLE,  // modelo configurado não existe para esta chave (HTTP 404)
+    RATE_LIMITED,       // limite de uso atingido (HTTP 429)
+    SERVER,             // serviço fora do ar (HTTP 5xx)
+    BAD_REQUEST,        // pedido recusado (outros HTTP 4xx)
+    EMPTY,              // nenhum resultado
+    INVALID_RESPONSE,   // JSON/XML inválido ou inesperado
+    UNEXPECTED          // qualquer outra exceção
+}
 
 sealed class SearchResult {
     data class Success(val answer: Answer) : SearchResult()
     data object NotConfigured : SearchResult()
-    data object Failure : SearchResult()
+    data class Failure(val error: SearchError) : SearchResult()
 }
 
 data class Turn(val question: String, val answer: String)
@@ -122,7 +158,10 @@ interface AppsPort {
 }
 
 interface DevicePort {
+    /** Existe uma rede com acesso à internet (sem exigir a "validação" do Android, que falha em algumas redes). */
     fun isOnline(): Boolean
+    /** Abre um endereço no navegador. */
+    fun openUrl(url: String): Boolean
     /** Aumenta/diminui o volume de mídia e retorna o novo nível em porcentagem. */
     fun raiseVolume(): Int
     fun lowerVolume(): Int

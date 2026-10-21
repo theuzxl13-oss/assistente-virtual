@@ -96,7 +96,8 @@ Um ponto específico da Motorola: a opção "pressionar e segurar o botão liga/
 | Buscar vídeos | YouTube Data API v3 `search.list` |
 | Tocar | `Intent.ACTION_VIEW` com o link do vídeo, no app YouTube |
 | Pausar / continuar / próxima | `AudioManager.dispatchMediaKeyEvent` (teclas de mídia para o player ativo) |
-| Pesquisar | Gemini API `generateContent` com a ferramenta `google_search` (resposta com fontes) |
+| Pesquisar | Gemini API `generateContent` com `google_search` (resumo com fontes); Wikipédia REST API (`/w/rest.php/v1/search/page` + `/api/rest_v1/page/summary`); Google Notícias RSS (`news.google.com/rss`) |
+| Abrir resultado / pesquisa no navegador | `Intent.ACTION_VIEW` com a URL do resultado ou `google.com/search?q=` codificada |
 | Abrir apps | `PackageManager.queryIntentActivities(CATEGORY_LAUNCHER)` + `getLaunchIntentForPackage` |
 | Volume | `AudioManager.adjustStreamVolume(STREAM_MUSIC)` com a barra do sistema |
 | Ler texto de outro app | `Intent.ACTION_SEND` (`text/plain`) |
@@ -181,9 +182,61 @@ consegue abrir a busca, e os resultados ficam na tela sem serem lidos.
 
 ### Pesquisa
 
-As respostas vêm do Gemini com a Pesquisa Google ativada. Quando a resposta vem com fontes, a Bela
-diz de onde é ("a informação é de g1.globo.com"). Quando não vem, ela avisa que a resposta não
-veio de uma fonte conferida.
+A pesquisa combina três fontes reais (`search/WebSearch.kt`):
+
+| Pedido | 1ª fonte | Se falhar |
+|---|---|---|
+| notícias ("notícias de hoje", "notícias sobre…") | Google Notícias (RSS, sem chave): manchetes reais, uma por vez | Gemini |
+| qualquer outra pergunta | Gemini + Pesquisa Google: resumo com os sites usados | Wikipédia (sem chave): resumo do artigo + lista de artigos |
+
+- A Bela sempre diz de onde veio a informação: "a informação é de…", "encontrei na Wikipédia…",
+  "notícias do Google Notícias". Se o Gemini responder sem fontes, ela avisa que a resposta não
+  veio de uma fonte conferida.
+- Depois de cada resposta ela oferece **mais detalhes**, **o próximo resultado** (ou a próxima
+  notícia) e **abrir no navegador**. Perguntas de acompanhamento usam o contexto.
+- Se tudo falhar, ela diz o motivo real (veja abaixo) e oferece **tentar de novo** ou **abrir a
+  pesquisa do Google no navegador**. Nesse caso, avisa que não leu aqueles resultados.
+- O modelo do Gemini não é fixo: o app tenta `gemini-flash-latest`. Se a API responder 404
+  (modelo aposentado ou bloqueado para a chave), consulta a lista de modelos da própria chave e
+  passa a usar o melhor modelo "flash" disponível.
+
+#### Mensagens de erro (cada causa tem a sua)
+
+| Causa (`SearchError`) | Origem técnica | O que a Bela fala |
+|---|---|---|
+| `NO_CONNECTION` | `ConnectException` / sem rede | "Não consegui me conectar ao serviço de pesquisa. A internet do celular parece estar fora do ar." |
+| `DNS` | `UnknownHostException` | "Não consegui encontrar o endereço do serviço de pesquisa…" |
+| `TIMEOUT` | `SocketTimeoutException` / callTimeout | "A pesquisa demorou demais." + "tentar de novo?" |
+| `UNAUTHORIZED` | HTTP 400 de chave, 401, 403 | "O serviço de pesquisa recusou a chave de acesso…" |
+| `MODEL_UNAVAILABLE` | HTTP 404 | "O serviço de pesquisa configurado não está mais disponível para esta chave…" |
+| `RATE_LIMITED` | HTTP 429 | "O limite de pesquisas do serviço foi atingido…" |
+| `SERVER` | HTTP 5xx | "O serviço de pesquisa está com problemas agora." |
+| `BAD_REQUEST` | outros 4xx | "O serviço de pesquisa não aceitou o pedido." |
+| `EMPTY` | nenhum resultado | "Não encontrei resultados para essa pergunta." |
+| `INVALID_RESPONSE` | JSON/XML inválido | "O serviço de pesquisa respondeu de um jeito que eu não entendi." |
+| `UNEXPECTED` | outra exceção | "Aconteceu um erro inesperado na pesquisa." |
+| não configurado | sem chave e sem resultado | "O serviço de pesquisa precisa ser configurado neste aplicativo." |
+
+"Sem internet" só é falado quando o Android não tem **nenhuma** rede com acesso à internet. A
+checagem não exige mais a "validação" do Android, que falha em algumas redes que funcionam.
+
+Registro técnico: logcat, tag `BelaPesquisa`, com a etapa, o código do erro, o HTTP e o modelo.
+Nunca registra a pergunta nem a chave. Para ver: `adb logcat -s BelaPesquisa`.
+
+#### Diagnóstico de 21/10/2026: por que a pesquisa falhava
+
+Chamada real feita no CI com a chave do projeto (`LiveSearchDiagnosticTest`):
+
+```
+gemini-2.5-flash com google_search -> HTTP 404 | status=NOT_FOUND
+mensagem=This model models/gemini-2.5-flash is no longer available to new users.
+Please update your code to use models/gemini-3.8-flash ...
+Modelos disponíveis para a chave -> HTTP 200 | ..., gemini-flash-latest, ..., gemini-3.8-flash, ...
+```
+
+O app fixava `gemini-2.5-flash`, que o Google restringiu a contas que já o usavam (changelog de
+18/09/2026). O 404 caía no mesmo `SearchResult.Failure` de qualquer erro, e era falado como "pode
+ser a internet". A chave e a internet estavam funcionando.
 
 ### Chaves de API
 

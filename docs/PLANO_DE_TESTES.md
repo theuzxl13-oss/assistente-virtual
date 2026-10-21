@@ -11,7 +11,10 @@ O APK só é gerado se todos passarem (`gradle testDebugUnitTest`).
 | `IntentParserTest` | variações naturais de "ligue para…", emergência, atender/recusar/desligar/quem está ligando, pare/cancele/repita/mais devagar/me ajude/volte/o que posso fazer, sim/não/ordinais, música, YouTube, hora/data/volume/abrir app, perguntas que **não** podem virar comando ("a que horas abre a farmácia", "o prédio mais alto", "como se chama…") |
 | `ConversationEngineTest` | confirmação antes de ligar; "não" cancela; nomes repetidos lidos e escolhidos por ordinal e por nome completo; contato inexistente; permissão negada; ligação que não começou **não** é anunciada como iniciada; quem está ligando (contato e número desconhecido, sem inventar nome); atender sem ligação tocando; desligar; repetir; velocidade; música com títulos lidos e escolha; sem chave do YouTube; pesquisa com fonte e detalhes; sem internet não finge pesquisar; abrir app; silêncio durante pergunta; falha de rede no reconhecimento; leitura de texto longo em partes |
 | `PtBrTest` | horas, datas e listas faladas corretamente |
-| `GeminiSearchParseTest` | separação resumo/detalhes, fontes sem repetição, resposta sem fonte, resposta vazia |
+| `GeminiSearchParseTest` | separação resumo/detalhes, fontes sem repetição, resposta sem fonte, resposta vazia, escolha de modelo pela lista real da chave |
+| `SearchClientsTest` | com servidor falso (MockWebServer): modelo aposentado (corpo 404 real) → troca de modelo; HTTP 400 de chave/401/403/429/500/503/outros 4xx; timeout; conexão recusada; DNS; conexão que cai; JSON inválido; resposta vazia; sem chave; Wikipédia (resumo, detalhes, lista, sem resultado, resumo que falha); Google Notícias (RSS, assunto, XML inválido); Gemini falhando e Wikipédia respondendo; chave nunca aparece no log |
+| `SearchQueryTest` | "pesquise no Google…" vira a pergunta; assunto para a enciclopédia; notícias com e sem assunto |
+| `LiveSearchDiagnosticTest` | **chamadas reais** (só no passo "Diagnóstico da pesquisa" do CI): Gemini, lista de modelos da chave, Wikipédia, Google Notícias e as 4 frases de exemplo pelas classes do app, ponta a ponta |
 | `YouTubeTitleTest` | títulos limpos para ouvir ("(Clipe Oficial)", "[HD]", "\| Ao Vivo", entidades HTML) |
 
 ## 2. Testes manuais no Moto G75 (Android 14)
@@ -66,7 +69,13 @@ depois ligado**.
 - [ ] "Quero ouvir Gabriela Rocha": lê 3 títulos; "o segundo" abre no YouTube e toca.
 - [ ] "Outros" lê mais 3; "quero ouvir outro" depois de tocar passa para o próximo da lista.
 - [ ] "Pause", "continue", "pare a música" funcionam com o YouTube tocando.
-- [ ] "Pesquise uma receita de bolo de cenoura": resumo + fonte + "quer ouvir mais detalhes?".
+- [ ] "Bela, pesquise quem foi Moisés": "Vou pesquisar" → resumo + fonte → "mais detalhes, o próximo resultado, ou abrir no navegador?".
+- [ ] "Pesquise notícias de hoje": lê a primeira manchete e o site; "próxima notícia" lê a seguinte; "abra no navegador" abre a notícia.
+- [ ] "Pesquise uma receita de bolo de cenoura" → "mais detalhes" lê os passos.
+- [ ] "Pesquise no Google como usar o WhatsApp": resposta com fonte.
+- [ ] Modo avião: "o celular não está conectado a nenhuma rede". Wi-Fi sem internet de verdade: mensagem de conexão/DNS/timeout, **não** "pesquisa não configurada".
+- [ ] Depois de um erro: "tente de novo" pesquisa de novo; "abra no navegador" abre o Google e ela avisa que não leu os resultados.
+- [ ] `adb logcat -s BelaPesquisa` mostra a etapa e o código do erro, sem a pergunta nem a chave.
 - [ ] Pergunta de acompanhamento ("e sem glúten?") usa o contexto.
 - [ ] Sem internet: pesquisa e música avisam; hora, ligação e apps funcionam.
 - [ ] "Que horas são", "que dia é hoje", "aumente o volume", "abra o WhatsApp".

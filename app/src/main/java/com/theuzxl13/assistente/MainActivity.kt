@@ -7,6 +7,7 @@ import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.os.Bundle
 import android.speech.tts.TextToSpeech
+import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
@@ -20,6 +21,10 @@ import com.theuzxl13.assistente.domain.ConversationState
 import com.theuzxl13.assistente.domain.Onboarding
 import com.theuzxl13.assistente.media.YouTubeMedia
 import com.theuzxl13.assistente.search.GeminiSearch
+import com.theuzxl13.assistente.search.NewsSearch
+import com.theuzxl13.assistente.search.SearchLog
+import com.theuzxl13.assistente.search.WebSearch
+import com.theuzxl13.assistente.search.WikipediaSearch
 import com.theuzxl13.assistente.settings.UserPreferences
 import com.theuzxl13.assistente.telephony.AndroidPhone
 import com.theuzxl13.assistente.voice.AndroidSpeechInput
@@ -65,6 +70,8 @@ class MainActivity : AppCompatActivity() {
         input = AndroidSpeechInput(this)
         sounds = ToneFeedback()
         val device = AndroidDevice(this)
+        // Registro técnico da pesquisa (logcat, tag "BelaPesquisa"): etapa e código do erro, sem a pergunta nem a chave.
+        val searchLog = SearchLog { stage, detail -> Log.w("BelaPesquisa", "etapa=$stage $detail") }
 
         engine = ConversationEngine(
             speech = speech,
@@ -74,7 +81,7 @@ class MainActivity : AppCompatActivity() {
             contacts = AndroidContacts(this),
             phone = AndroidPhone(this),
             media = YouTubeMedia(this),
-            search = GeminiSearch(),
+            search = WebSearch(GeminiSearch(log = searchLog), WikipediaSearch(log = searchLog), NewsSearch(log = searchLog), searchLog),
             apps = AndroidApps(this),
             device = device,
             prefs = prefs

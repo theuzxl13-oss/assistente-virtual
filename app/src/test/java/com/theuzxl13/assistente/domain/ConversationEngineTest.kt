@@ -98,6 +98,8 @@ class ConversationEngineTest {
     private class FakeDevice(var online: Boolean = true) : DevicePort {
         var volume = 50
         override fun isOnline() = online
+        val opened = mutableListOf<String>()
+        override fun openUrl(url: String): Boolean { opened += url; return true }
         override fun raiseVolume(): Int { volume = minOf(100, volume + 10); return volume }
         override fun lowerVolume(): Int { volume = maxOf(0, volume - 10); return volume }
         override fun isTalkBackOn() = true
@@ -279,7 +281,7 @@ class ConversationEngineTest {
         device.online = false
         engine(FakeInput("qual a capital da França")).runSession()
         assertTrue(search.questions.isEmpty())
-        assertTrue(speech.spoken.last().contains("sem conexão"))
+        assertTrue(speech.spoken.last().contains("não está conectado a nenhuma rede"))
     }
 
     @Test
@@ -313,6 +315,91 @@ class ConversationEngineTest {
         e.runSession(start = BelaIntent.ReadShared)
         assertEquals("Quer que eu continue lendo?", speech.spoken[1])
         assertEquals("Tudo bem, parei a leitura.", speech.spoken.last())
+    }
+
+    private val wikiAnswer = Answer(
+        summary = "Moisés é uma figura central nas religiões abraâmicas.",
+        details = "Recebeu as Tábuas da Lei no Monte Sinai.",
+        sources = listOf(Source("Wikipédia", "https://pt.wikipedia.org/wiki/Mois%C3%A9s")),
+        results = listOf(
+            WebResult("Moisés", "profeta", "https://pt.wikipedia.org/wiki/Mois%C3%A9s", "Wikipédia"),
+            WebResult("Moisés (Michelangelo)", "escultura de Moisés", "https://pt.wikipedia.org/wiki/Mois%C3%A9s_(Michelangelo)", "Wikipédia")
+        ),
+        provider = SearchProvider.WIKIPEDIA
+    )
+
+    @Test
+    fun `pesquisa le o resultado, detalhes e o proximo`() = runTest {
+        search.result = SearchResult.Success(wikiAnswer)
+        engine(FakeInput("Bela, pesquise quem foi Moisés", "mais detalhes", "próximo resultado")).runSession()
+        assertEquals("Vou pesquisar. Só um instante.", speech.spoken[0])
+        assertEquals("Encontrei na Wikipédia, em Moisés. Moisés é uma figura central nas religiões abraâmicas.", speech.spoken[1])
+        assertEquals("Quer ouvir mais detalhes, o próximo resultado, ou abrir no navegador?", speech.spoken[2])
+        assertEquals("Recebeu as Tábuas da Lei no Monte Sinai.", speech.spoken[3])
+        assertTrue(speech.spoken.contains("Resultado 2: Moisés (Michelangelo), de Wikipédia. escultura de Moisés"))
+    }
+
+    @Test
+    fun `abre o resultado no navegador quando ela pede`() = runTest {
+        search.result = SearchResult.Success(wikiAnswer)
+        engine(FakeInput("pesquise quem foi Moisés", "abra no navegador")).runSession()
+        assertEquals(listOf("https://pt.wikipedia.org/wiki/Mois%C3%A9s"), device.opened)
+    }
+
+    @Test
+    fun `noticias leem a manchete e passam para a proxima`() = runTest {
+        search.result = SearchResult.Success(
+            Answer(
+                "Chuva forte atinge São Paulo", "", emptyList(),
+                listOf(
+                    WebResult("Chuva forte atinge São Paulo", "", "https://n/1", "g1"),
+                    WebResult("Inflação desacelera", "", "https://n/2", "Folha de S.Paulo")
+                ),
+                SearchProvider.NEWS
+            )
+        )
+        engine(FakeInput("pesquise notícias de hoje", "próxima notícia")).runSession()
+        assertEquals("Estas são notícias do Google Notícias. A primeira: Chuva forte atinge São Paulo, de g1.", speech.spoken[1])
+        assertTrue(speech.spoken.contains("Próxima notícia: Inflação desacelera, de Folha de S.Paulo."))
+    }
+
+    @Test
+    fun `modelo indisponivel nao culpa a internet`() = runTest {
+        search.result = SearchResult.Failure(SearchError.MODEL_UNAVAILABLE)
+        engine(FakeInput("pesquise quem foi Moisés")).runSession()
+        val spokenText = speech.spoken.joinToString(" ")
+        assertTrue(spokenText.contains("não está mais disponível para esta chave"))
+        assertFalse(spokenText.contains("internet"))
+    }
+
+    @Test
+    fun `cada erro tem sua mensagem e nenhuma de configuracao fala em internet`() {
+        val messages = SearchError.values().associateWith { ConversationEngine.errorMessage(it) }
+        assertEquals(SearchError.values().size, messages.values.toSet().size)
+        for (error in listOf(SearchError.UNAUTHORIZED, SearchError.MODEL_UNAVAILABLE, SearchError.RATE_LIMITED,
+            SearchError.SERVER, SearchError.EMPTY, SearchError.INVALID_RESPONSE, SearchError.BAD_REQUEST)) {
+            assertFalse(error.name, messages.getValue(error).contains("internet"))
+        }
+        assertEquals("A pesquisa demorou demais.", messages[SearchError.TIMEOUT])
+        assertEquals("Não encontrei resultados para essa pergunta.", messages[SearchError.EMPTY])
+    }
+
+    @Test
+    fun `timeout oferece tentar de novo e tenta`() = runTest {
+        search.result = SearchResult.Failure(SearchError.TIMEOUT)
+        engine(FakeInput("pesquise receita de bolo", "tente de novo")).runSession()
+        assertEquals("A pesquisa demorou demais.", speech.spoken[1])
+        assertEquals("Quer que eu tente de novo, ou que eu abra a pesquisa no navegador?", speech.spoken[2])
+        assertEquals(2, search.questions.size)
+    }
+
+    @Test
+    fun `falha pode abrir a pesquisa no navegador sem fingir que leu`() = runTest {
+        search.result = SearchResult.NotConfigured
+        engine(FakeInput("pesquise no Google como usar o WhatsApp", "abra no navegador")).runSession()
+        assertEquals("O serviço de pesquisa precisa ser configurado neste aplicativo.", speech.spoken[1])
+        assertEquals("https://www.google.com/search?hl=pt-BR&q=como+usar+o+WhatsApp", device.opened.single())
+        assertTrue(speech.spoken.last().contains("eu não li esses resultados"))
     }
 
     @Test

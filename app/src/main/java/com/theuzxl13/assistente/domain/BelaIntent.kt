@@ -20,6 +20,12 @@ sealed class BelaIntent {
     /** Escolha numa lista lida pela Bela. Índice a partir de 0; -1 significa "o último". */
     data class Choice(val index: Int) : BelaIntent()
     data object Another : BelaIntent()
+    /** "Mais detalhes", "leia tudo": leitura completa do que acabou de ser resumido. */
+    data object Details : BelaIntent()
+    /** "Abra no navegador": abre a página do resultado ou a pesquisa no navegador. */
+    data object OpenInBrowser : BelaIntent()
+    /** "Tente de novo". */
+    data object Retry : BelaIntent()
 
     // Ligações
     data class Call(val name: String) : BelaIntent()

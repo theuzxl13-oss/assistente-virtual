@@ -35,6 +35,9 @@ object IntentParser {
             YES.matches(s) -> BelaIntent.Yes
             NO.matches(s) -> BelaIntent.No
             ANOTHER.matches(s) -> BelaIntent.Another
+            DETAILS.matches(s) -> BelaIntent.Details
+            OPEN_IN_BROWSER.matches(s) -> BelaIntent.OpenInBrowser
+            RETRY.matches(s) -> BelaIntent.Retry
 
             TIME.matches(s) -> BelaIntent.Time
             DATE.containsMatchIn(s) -> BelaIntent.Date
@@ -166,7 +169,16 @@ object IntentParser {
         "(?:nao|nao quero|nao obrigad[oa]|negativo|errado|nao e esse|nao e essa|nao e|nenhum|nenhuma|nenhum deles|nao e nenhum)"
     )
     private val ANOTHER = Regex(
-        "(?:outr[oa]|quero (?:ouvir |escutar )?outr[oa]|outra (?:musica|opcao)|outro (?:video|louvor|hino)|mais um|mais uma|tem outr[oa])"
+        "(?:(?:o |a )?proxim[oa] (?:resultado|noticia|fonte|site)|(?:o |a )?proxim[oa]|outr[oa] (?:resultado|noticia|fonte)|outr[oa]|quero (?:ouvir |escutar )?outr[oa]|outra (?:musica|opcao)|outro (?:video|louvor|hino)|mais um|mais uma|tem outr[oa])"
+    )
+    private val DETAILS = Regex(
+        "$POLITE(?:mais detalhes|detalhes|leia tudo|le tudo|leitura completa|a leitura completa|completa|tudo|leia mais|fala mais|fale mais|quero saber mais|continue lendo|continua lendo|explica melhor)(?: por favor)?"
+    )
+    private val OPEN_IN_BROWSER = Regex(
+        "$POLITE(?:abr(?:a|e|ir)|mostr(?:a|e|ar)|ve[jr]a?)(?: (?:isso|esse|essa|este|esta|ele|ela|o resultado|a pagina|o site|a noticia|a pesquisa|os resultados))? (?:no|pelo|na) (?:navegador|chrome|google|internet|tela)|abr(?:a|e|ir) (?:a pagina|o site|o link|a noticia|o resultado|os resultados)"
+    )
+    private val RETRY = Regex(
+        "$POLITE(?:tent(?:a|e|ar) (?:de novo|novamente|outra vez)|pesquis(?:a|e|ar) (?:de novo|novamente|outra vez))"
     )
     private val CHOICE = Regex(
         "(?:(?:o|a|opcao|numero|o numero|a opcao)\\s+)?(primeiro|primeira|segundo|segunda|terceiro|terceira|quarto|quarta|quinto|quinta|ultimo|ultima|um|uma|1|dois|duas|2|tres|3|quatro|4|cinco|5)(?:\\s+(?:opcao|contato|video|musica|resultado|ai|mesmo|mesma|numero))*"

@@ -105,6 +105,27 @@ class IntentParserTest {
     }
 
     @Test
+    fun `pedidos de pesquisa chegam na pesquisa`() {
+        assertTrue(parse("Bela, pesquise quem foi Moisés.") is BelaIntent.Ask)
+        assertTrue(parse("Pesquise notícias de hoje.") is BelaIntent.Ask)
+        assertTrue(parse("Pesquise uma receita de bolo.") is BelaIntent.Ask)
+        assertTrue(parse("Pesquise no Google como usar o WhatsApp.") is BelaIntent.Ask)
+    }
+
+    @Test
+    fun `comandos durante a leitura de resultados`() {
+        assertEquals(BelaIntent.Another, parse("próximo resultado"))
+        assertEquals(BelaIntent.Another, parse("a próxima notícia"))
+        assertEquals(BelaIntent.Details, parse("mais detalhes"))
+        assertEquals(BelaIntent.Details, parse("leia tudo"))
+        assertEquals(BelaIntent.OpenInBrowser, parse("abra no navegador"))
+        assertEquals(BelaIntent.OpenInBrowser, parse("abre a página"))
+        assertEquals(BelaIntent.Retry, parse("tente de novo"))
+        assertEquals(BelaIntent.ResumeMedia, parse("continua"))
+        assertEquals(BelaIntent.OpenApp("google"), parse("abra o Google"))
+    }
+
+    @Test
     fun `numeros so viram escolha quando ha lista`() {
         assertTrue(parse("um") !is BelaIntent.Choice)
         assertEquals(BelaIntent.Empty, parse("Bela"))

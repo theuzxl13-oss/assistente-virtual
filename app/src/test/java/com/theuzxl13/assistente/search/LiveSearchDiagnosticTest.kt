@@ -30,14 +30,43 @@ class LiveSearchDiagnosticTest {
         line("Chave do Gemini presente no build: ${key.isNotBlank()} (tamanho ${key.length})")
 
         if (key.isNotBlank()) {
-            gemini("gemini-2.5-flash com google_search (igual ao app)", "gemini-2.5-flash", grounding = true)
-            gemini("gemini-2.5-flash sem google_search", "gemini-2.5-flash", grounding = false)
+            gemini("gemini-2.5-flash com google_search (versão antiga do app)", "gemini-2.5-flash", grounding = true)
+            gemini("gemini-flash-latest com google_search", "gemini-flash-latest", grounding = true)
+            gemini("gemini-3.8-flash com google_search", "gemini-3.8-flash", grounding = true)
             listModels()
         }
         get("Wikipédia (busca)", "https://pt.wikipedia.org/w/rest.php/v1/search/page?q=Mois%C3%A9s&limit=1")
         get("Google Notícias (RSS)", "https://news.google.com/rss/search?q=Brasil&hl=pt-BR&gl=BR&ceid=BR:pt-419")
 
+        endToEnd()
         File("build/diagnostico-pesquisa.txt").writeText(report.toString())
+    }
+
+    /** As classes reais do app (WebSearch → Gemini / Wikipédia / Google Notícias), com as frases de exemplo. */
+    private fun endToEnd() {
+        val searchLog = SearchLog { stage, detail -> line("   log: etapa=$stage $detail") }
+        val search = WebSearch(GeminiSearch(log = searchLog), WikipediaSearch(log = searchLog), NewsSearch(log = searchLog), searchLog)
+        val phrases = listOf(
+            "Bela, pesquise quem foi Moisés.",
+            "Pesquise notícias de hoje.",
+            "Pesquise uma receita de bolo.",
+            "Pesquise no Google como usar o WhatsApp."
+        )
+        for (phrase in phrases) {
+            val result = kotlinx.coroutines.runBlocking { search.ask(phrase, emptyList()) }
+            val text = when (result) {
+                is com.theuzxl13.assistente.domain.SearchResult.Success -> with(result.answer) {
+                    "OK fonte=${provider.name} resultados=${results.size} sites=${sources.take(3).joinToString { it.title }} | resumo=${summary.take(160)}"
+                }
+                is com.theuzxl13.assistente.domain.SearchResult.Failure -> "FALHA ${result.error}"
+                com.theuzxl13.assistente.domain.SearchResult.NotConfigured -> "NÃO CONFIGURADO"
+            }
+            line("Ponta a ponta \"$phrase\" -> $text")
+        }
+        // Sem chave do Gemini: a pesquisa precisa continuar funcionando pela Wikipédia/Notícias.
+        val noKey = WebSearch(GeminiSearch(apiKey = ""), WikipediaSearch(), NewsSearch())
+        val r = kotlinx.coroutines.runBlocking { noKey.ask("quem foi Moisés", emptyList()) }
+        line("Ponta a ponta sem chave do Gemini \"quem foi Moisés\" -> ${if (r is com.theuzxl13.assistente.domain.SearchResult.Success) "OK fonte=${r.answer.provider}" else r.toString()}")
     }
 
     private fun gemini(label: String, model: String, grounding: Boolean) {
