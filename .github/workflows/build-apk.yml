@@ -41,6 +41,14 @@ jobs:
       - name: Testes automatizados
         run: gradle testDebugUnitTest --no-daemon
 
+      - name: Diagnóstico da pesquisa (chamadas reais)
+        continue-on-error: true
+        env:
+          LIVE_SEARCH_DIAGNOSTIC: "1"
+        run: |
+          gradle testDebugUnitTest --tests '*LiveSearchDiagnosticTest' --rerun --no-daemon -q || true
+          cat app/build/diagnostico-pesquisa.txt || echo "sem relatório"
+
       - name: Compilar APK
         run: gradle assembleDebug --no-daemon
 
