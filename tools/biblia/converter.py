@@ -62,12 +62,10 @@ def convert(source_path, books):
     # O texto começa no primeiro livro (depois do índice e da nota do transcritor).
     body = body[body.index("O PRIMEIRO LIVRO DE MOYS"):]
 
-    result = []          # [(book_index, chapter, verse, text)]
-    book_index = -1
-    chapter = verse = 0
+    # 1ª passada: só os parágrafos de versículo, com os sinais que vieram antes de cada um.
+    items = []           # [(numero, texto, troca_de_capitulo_provavel, titulo_de_livro_antes)]
     heading_since_verse = True
-    boundary = True      # sinal de troca de capítulo: notas de rodapé ou espaço grande desde o último versículo
-
+    boundary = True      # notas de rodapé ou espaço grande desde o último versículo
     for text, blanks in paragraphs(body.split("\n")):
         if blanks >= 3:
             boundary = True
@@ -82,23 +80,33 @@ def convert(source_path, books):
         m = VERSE.match(text)
         if not m:
             continue                      # texto solto (ex.: subscrições de cartas)
-        n, content = int(m.group(1)), clean(m.group(2))
+        items.append((int(m.group(1)), clean(m.group(2)), boundary, heading_since_verse))
+        heading_since_verse = False
+        boundary = False
 
-        if heading_since_verse and n == 1 and (book_index < 0 or chapter >= 1):
+    # 2ª passada: decide versículo x capítulo novo; no caso ambíguo, olha o parágrafo seguinte.
+    result = []          # [(book_index, chapter, verse, text)]
+    book_index = -1
+    chapter = verse = 0
+    for i, (n, content, boundary, new_book) in enumerate(items):
+        following = items[i + 1][0] if i + 1 < len(items) else None
+        if new_book and n == 1:
             book_index += 1
             chapter, verse = 1, 1
-        elif n == verse + 1 and not (boundary and n == chapter + 1 and verse > 1):
+        elif boundary and n == chapter + 1 and n == verse + 1:
+            # Ex.: versículo 10 do capítulo 9 depois de um título x começo do capítulo 10.
+            if following == 2:
+                chapter, verse = n, 1
+            else:
+                verse = n
+        elif n == verse + 1:
             verse = n
         elif boundary and n == chapter + 1:
             chapter, verse = n, 1
-        elif n == verse + 1:
-            verse = n
         else:
             raise SystemExit(
                 f"sequência inesperada em {books[book_index][0]} {chapter}:{verse} -> parágrafo {n}: {content[:60]!r}"
             )
-        heading_since_verse = False
-        boundary = False
         result.append((book_index, chapter, verse, content))
     return result
 
