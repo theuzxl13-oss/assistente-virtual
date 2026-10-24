@@ -1,0 +1,148 @@
+#!/usr/bin/env python3
+"""
+Converte o texto da Bíblia Almeida, Edição Revista e Corrigida (Lisboa, 1911; domínio público),
+transcrito pelo Distributed Proofreaders, para os arquivos que o app lê:
+
+    app/src/main/assets/biblia/almeida1911/<LIVRO>.txt   (linhas "capitulo<TAB>versiculo<TAB>texto")
+
+Uso: python3 converter.py <texto_fonte.txt> <pasta_saida> <BibleBooks.kt>
+
+O texto bíblico não é alterado: só são retiradas as chamadas de notas ([1], [A]), as marcas de
+itálico (_palavra_), os títulos de seção, as notas de rodapé e as notas de data.
+Sai com erro se a quantidade de capítulos de algum livro não bater com a tabela do app.
+"""
+import os
+import re
+import sys
+from collections import OrderedDict
+
+VERSE = re.compile(r"^(\d{1,3}) (.+)$", re.S)
+NOTE_MARK = re.compile(r"\s*\[(?:\d{1,3}|[A-Z]{1,2})\]")
+
+
+def load_books(kotlin_path):
+    text = open(kotlin_path, encoding="utf-8").read()
+    books = re.findall(r'b\("(\w+)", "([^"]+)", (\d+)', text)
+    if len(books) != 66:
+        sys.exit(f"esperava 66 livros em {kotlin_path}, achei {len(books)}")
+    return [(book_id, name, int(chapters)) for book_id, name, chapters in books]
+
+
+def paragraphs(lines):
+    """Junta linhas em parágrafos; devolve (texto, linhas_em_branco_antes)."""
+    current, blanks = [], 0
+    for line in lines:
+        if line.strip():
+            current.append(line.strip())
+        else:
+            if current:
+                yield " ".join(current), blanks
+                current, blanks = [], 0
+            blanks += 1
+    if current:
+        yield " ".join(current), blanks
+
+
+def is_book_heading(text):
+    letters = [c for c in text if c.isalpha()]
+    return len(letters) >= 6 and all(c.isupper() for c in letters) and not text[0].isdigit()
+
+
+def clean(text):
+    text = NOTE_MARK.sub("", text)
+    text = text.replace("_", "")
+    return re.sub(r"\s+", " ", text).strip()
+
+
+def convert(source_path, books):
+    raw = open(source_path, encoding="utf-8-sig").read().replace("\r\n", "\n")
+    start = raw.index("*** START OF THE PROJECT GUTENBERG EBOOK")
+    end = raw.index("*** END OF THE PROJECT GUTENBERG EBOOK")
+    body = raw[start:end]
+    # O texto começa no primeiro livro (depois do índice e da nota do transcritor).
+    body = body[body.index("O PRIMEIRO LIVRO DE MOYS"):]
+
+    result = []          # [(book_index, chapter, verse, text)]
+    book_index = -1
+    chapter = verse = 0
+    heading_since_verse = True
+    boundary = True      # sinal de troca de capítulo: notas de rodapé ou espaço grande desde o último versículo
+
+    for text, blanks in paragraphs(body.split("\n")):
+        if blanks >= 3:
+            boundary = True
+        if text.startswith("["):          # notas de rodapé e notas de data
+            boundary = True
+            continue
+        if text.startswith("_") and text.rstrip(".").endswith("_"):   # título de seção
+            continue
+        if is_book_heading(text):
+            heading_since_verse = True
+            continue
+        m = VERSE.match(text)
+        if not m:
+            continue                      # texto solto (ex.: subscrições de cartas)
+        n, content = int(m.group(1)), clean(m.group(2))
+
+        if heading_since_verse and n == 1 and (book_index < 0 or chapter >= 1):
+            book_index += 1
+            chapter, verse = 1, 1
+        elif n == verse + 1 and not (boundary and n == chapter + 1 and verse > 1):
+            verse = n
+        elif boundary and n == chapter + 1:
+            chapter, verse = n, 1
+        elif n == verse + 1:
+            verse = n
+        else:
+            raise SystemExit(
+                f"sequência inesperada em {books[book_index][0]} {chapter}:{verse} -> parágrafo {n}: {content[:60]!r}"
+            )
+        heading_since_verse = False
+        boundary = False
+        result.append((book_index, chapter, verse, content))
+    return result
+
+
+def validate(verses, books):
+    problems = []
+    by_book = OrderedDict()
+    for book_index, chapter, verse, _ in verses:
+        by_book.setdefault(book_index, {}).setdefault(chapter, []).append(verse)
+    if len(by_book) != 66:
+        problems.append(f"livros encontrados: {len(by_book)} (esperado 66)")
+    for book_index, (book_id, name, expected) in enumerate(books):
+        chapters = by_book.get(book_index, {})
+        if len(chapters) != expected:
+            problems.append(f"{book_id}: {len(chapters)} capítulos (esperado {expected})")
+        for chapter, numbers in chapters.items():
+            if numbers != list(range(1, len(numbers) + 1)):
+                problems.append(f"{book_id} {chapter}: versículos fora de ordem {numbers[:5]}...")
+    return problems
+
+
+def main():
+    source, out_dir, kotlin = sys.argv[1:4]
+    books = load_books(kotlin)
+    verses = convert(source, books)
+    problems = validate(verses, books)
+    print(f"versículos: {len(verses)}")
+    for p in problems:
+        print("PROBLEMA:", p)
+
+    lookup = {(books[b][0], c, v): t for b, c, v, t in verses}
+    for ref in [("GEN", 1, 1), ("PSA", 23, 1), ("JHN", 3, 16), ("1PE", 5, 7), ("REV", 22, 21)]:
+        print(f"{ref[0]} {ref[1]}:{ref[2]} = {lookup.get(ref, '<faltando>')}")
+    if problems:
+        sys.exit(1)
+
+    os.makedirs(out_dir, exist_ok=True)
+    for book_index, (book_id, _, _) in enumerate(books):
+        with open(os.path.join(out_dir, f"{book_id}.txt"), "w", encoding="utf-8", newline="\n") as f:
+            for b, c, v, t in verses:
+                if b == book_index:
+                    f.write(f"{c}\t{v}\t{t}\n")
+    print(f"arquivos gerados em {out_dir}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,0 +1,39 @@
+name: Gerar texto da Bíblia
+
+# Regenera app/src/main/assets/biblia/almeida1911 a partir da fonte de domínio público
+# (Almeida, Edição Revista e Corrigida, Lisboa 1911 — transcrição do Distributed Proofreaders,
+# distribuída pelo Projeto Gutenberg, eBook #62383). Roda quando o conversor muda.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["tools/biblia/**", ".github/workflows/gerar-biblia.yml"]
+
+permissions:
+  contents: write
+
+jobs:
+  gerar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Baixar a fonte e conferir que é o mesmo arquivo validado
+        run: |
+          curl -sSL -A "Mozilla/5.0" -o fonte.txt https://www.gutenberg.org/cache/epub/62383/pg62383.txt
+          echo "bf9c6053bfb441d117a2a128d4edec9fbe935f415bc8f7bf4e1f3f9121790215  fonte.txt" | sha256sum -c -
+
+      - name: Converter e validar
+        run: |
+          rm -rf app/src/main/assets/biblia/almeida1911
+          python3 tools/biblia/converter.py fonte.txt app/src/main/assets/biblia/almeida1911 \
+            app/src/main/java/com/theuzxl13/assistente/domain/BibleBooks.kt
+
+      - name: Gravar os arquivos gerados no branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/assets/biblia
+          if git diff --cached --quiet; then echo "sem mudanças"; exit 0; fi
+          git commit -m "Gera texto da Bíblia (Almeida Revista e Corrigida 1911, domínio público)"
+          git push
