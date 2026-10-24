@@ -123,7 +123,7 @@ def convert(source_path, books):
             chapter, verse = n, 1
         elif verse + 1 < n <= verse + 5 and result and split_embedded(result, verse, n):
             verse = n                         # versículos que estavam colados no parágrafo anterior
-        elif following == verse + 2 or (following is not None and following == n + 1 and abs(n - verse) <= 9):
+        elif following == verse + 2:
             # Número errado na própria fonte (ex.: Marcos 4.34 impresso como "31"): a sequência
             # em volta mostra qual é o versículo certo.
             WARNINGS.append(f"{books[book_index][0]} {chapter}:{verse + 1} estava numerado {n} na fonte; corrigido")
