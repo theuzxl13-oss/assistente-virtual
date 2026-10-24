@@ -64,9 +64,12 @@ def convert(source_path, books):
 
     # 1ª passada: só os parágrafos de versículo, com os sinais que vieram antes de cada um.
     items = []           # [(numero, texto, troca_de_capitulo_provavel, titulo_de_livro_antes)]
+    skipped = []         # parágrafos ignorados antes de cada versículo (para mensagens de erro)
+    skipped_now = []
     heading_since_verse = True
     boundary = True      # notas de rodapé ou espaço grande desde o último versículo
     for text, blanks in paragraphs(body.split("\n")):
+        skipped_now.append(text[:90])
         if blanks >= 3:
             boundary = True
         if text.startswith("["):          # notas de rodapé e notas de data
@@ -81,6 +84,8 @@ def convert(source_path, books):
         if not m:
             continue                      # texto solto (ex.: subscrições de cartas)
         items.append((int(m.group(1)), clean(m.group(2)), boundary, heading_since_verse))
+        skipped.append(skipped_now[:-1][-6:])
+        skipped_now = []
         heading_since_verse = False
         boundary = False
 
@@ -105,6 +110,9 @@ def convert(source_path, books):
         elif boundary and n == chapter + 1:
             chapter, verse = n, 1
         else:
+            print("parágrafos ignorados antes do erro:")
+            for t in skipped[i]:
+                print("   |", t)
             raise SystemExit(
                 f"sequência inesperada em {books[book_index][0]} {chapter}:{verse} -> parágrafo {n}: {content[:60]!r}"
             )
