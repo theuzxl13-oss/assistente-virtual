@@ -19,6 +19,8 @@ from collections import OrderedDict
 VERSE = re.compile(r"^(\d{1,3}) (.+)$", re.S)
 # Lamentações e Salmo 119 são acrósticos: o versículo vem depois da letra hebraica ("ALEPH. 3 Eu sou...").
 HEBREW_LETTER = re.compile(r"^(?:ALEPH|BETH|GIMEL|DALETH|HE|VAU|ZAIN|CHETH|HETH|TETH|JOD|IOD|CAPH|LAMED|MEM|NUN|SAMECH|AIN|PE|TSADE|TZADE|KOPH|COPH|RESH|SCHIN|SHIN|TAU|THAU)\.\s+")
+# Chamada de nota antes do número do versículo: "[3] 3 Judah passou..." (não confundir com a nota "[3] Jer. 6.25").
+LEADING_NOTE = re.compile(r"^(?:\[(?:\d{1,3}|[A-Z]{1,2})\]\s*)+(?=\d{1,3} )")
 NOTE_MARK = re.compile(r"\s*\[(?:\d{1,3}|[A-Z]{1,2})\]")
 
 
@@ -74,7 +76,8 @@ def convert(source_path, books):
         skipped_now.append(text[:90])
         if blanks >= 3:
             boundary = True
-        if text.startswith("["):          # notas de rodapé e notas de data
+        verse_text = LEADING_NOTE.sub("", HEBREW_LETTER.sub("", text))
+        if text.startswith("[") and verse_text.startswith("["):   # notas de rodapé e notas de data
             boundary = True
             continue
         if text.startswith("_") and text.rstrip(".").endswith("_"):   # título de seção
@@ -82,7 +85,7 @@ def convert(source_path, books):
         if is_book_heading(text):
             heading_since_verse = True
             continue
-        m = VERSE.match(HEBREW_LETTER.sub("", text))
+        m = VERSE.match(verse_text)
         if not m:
             continue                      # texto solto (ex.: subscrições de cartas)
         items.append((int(m.group(1)), clean(m.group(2)), boundary, heading_since_verse))
