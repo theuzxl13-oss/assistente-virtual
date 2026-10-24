@@ -32,11 +32,18 @@ def load_books(kotlin_path):
     return [(book_id, name, int(chapters)) for book_id, name, chapters in books]
 
 
+# Linha que começa um versículo mesmo sem linha em branco antes ("5 Não tornará...").
+VERSE_LINE = re.compile(r"^\d{1,3} (?:\[[^\]]+\] *)*[A-ZÀ-Ý«“\"(]")
+
+
 def paragraphs(lines):
     """Junta linhas em parágrafos; devolve (texto, linhas_em_branco_antes)."""
     current, blanks = [], 0
     for line in lines:
         if line.strip():
+            if current and VERSE_LINE.match(line.strip()) and VERSE.match(current[0]):
+                yield " ".join(current), blanks
+                current, blanks = [], 0
             current.append(line.strip())
         else:
             if current:
@@ -114,6 +121,8 @@ def convert(source_path, books):
             verse = n
         elif boundary and n == chapter + 1:
             chapter, verse = n, 1
+        elif verse + 1 < n <= verse + 5 and result and split_embedded(result, verse, n):
+            verse = n                         # versículos que estavam colados no parágrafo anterior
         else:
             print("parágrafos ignorados antes do erro:")
             for t in skipped[i]:
@@ -123,6 +132,21 @@ def convert(source_path, books):
             )
         result.append((book_index, chapter, verse, content))
     return result
+
+
+def split_embedded(result, verse, n):
+    """Separa "4 texto... 5 texto..." quando os versículos verse+1..n-1 ficaram dentro do anterior."""
+    book_index, chapter, last_verse, text = result[-1]
+    pieces = [text]
+    for missing in range(verse + 1, n):
+        m = re.search(rf"(?<=[.;:!?,]) {missing} (?=[A-ZÀ-Ý«“\"(])", pieces[-1])
+        if not m:
+            return False
+        pieces[-1:] = [pieces[-1][:m.start()].strip(), pieces[-1][m.end():].strip()]
+    result[-1] = (book_index, chapter, last_verse, pieces[0])
+    for offset, piece in enumerate(pieces[1:], start=1):
+        result.append((book_index, chapter, last_verse + offset, piece))
+    return True
 
 
 def validate(verses, books):
