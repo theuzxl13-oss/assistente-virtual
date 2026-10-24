@@ -90,7 +90,8 @@ def convert(source_path, books):
     chapter = verse = 0
     for i, (n, content, boundary, new_book) in enumerate(items):
         following = items[i + 1][0] if i + 1 < len(items) else None
-        if new_book and n == 1:
+        book_done = book_index < 0 or chapter >= books[book_index][2]
+        if n == 1 and (new_book or book_done) and (book_done or verse > 1):
             book_index += 1
             chapter, verse = 1, 1
         elif boundary and n == chapter + 1 and n == verse + 1:
