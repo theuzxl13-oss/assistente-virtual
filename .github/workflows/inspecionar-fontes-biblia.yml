@@ -1,0 +1,27 @@
+name: Inspecionar fontes da Bíblia (temporário)
+
+on:
+  push:
+    branches: ["claude/**"]
+    paths: [".github/workflows/inspecionar-fontes-biblia.yml"]
+
+jobs:
+  inspecionar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Projeto Gutenberg 62383 (Almeida)
+        run: |
+          curl -sSL -A "Mozilla/5.0" -o pg.txt https://www.gutenberg.org/cache/epub/62383/pg62383.txt || true
+          wc -c pg.txt; echo "=== cabeçalho ==="; head -n 120 pg.txt
+          echo "=== 1 Pedro / Pedro ==="; grep -n -i -m 10 "PEDRO" pg.txt || true
+          echo "=== amostras ==="; grep -n -m 5 "lançando sobre elle\|lançando sobre ele\|cuidado de vós" pg.txt || true
+          grep -n -m 5 "Porque Deus amou\|Porque Deos amou" pg.txt || true
+          grep -n -m 3 "No principio creou\|No princípio criou" pg.txt || true
+          echo "=== rodapé ==="; tail -n 40 pg.txt | head -n 15
+      - name: eBible.org (Português)
+        run: |
+          curl -sSL -A "Mozilla/5.0" "https://ebible.org/find/country.php?c=BR" | sed 's/<[^>]*>/ /g' | grep -i -E "portugu|almeida|livre" | sed 's/  */ /g' | head -40 || true
+          for id in porbr2018 por1911 porbrbsl poralm; do echo "=== $id ==="; curl -sSL -A "Mozilla/5.0" "https://ebible.org/$id/copyright.htm" | sed 's/<[^>]*>/ /g' | sed 's/  */ /g' | grep -v "^ *$" | head -25; done
+      - name: archive.org (Almeida Revista e Corrigida antigas)
+        run: |
+          curl -sSL "https://archive.org/advancedsearch.php?q=title%3A%28biblia+sagrada%29+AND+%28almeida%29+AND+language%3A%28por+OR+Portuguese%29&fl%5B%5D=identifier&fl%5B%5D=title&fl%5B%5D=date&fl%5B%5D=publisher&rows=30&output=json" | python3 -c "import json,sys; d=json.load(sys.stdin); [print(x.get('date'),'|',x.get('identifier'),'|',x.get('title'),'|',x.get('publisher')) for x in d['response']['docs']]" || true
