@@ -17,6 +17,8 @@ import sys
 from collections import OrderedDict
 
 VERSE = re.compile(r"^(\d{1,3}) (.+)$", re.S)
+# Lamentações e Salmo 119 são acrósticos: o versículo vem depois da letra hebraica ("ALEPH. 3 Eu sou...").
+HEBREW_LETTER = re.compile(r"^(?:ALEPH|BETH|GIMEL|DALETH|HE|VAU|ZAIN|CHETH|HETH|TETH|JOD|IOD|CAPH|LAMED|MEM|NUN|SAMECH|AIN|PE|TSADE|TZADE|KOPH|COPH|RESH|SCHIN|SHIN|TAU|THAU)\.\s+")
 NOTE_MARK = re.compile(r"\s*\[(?:\d{1,3}|[A-Z]{1,2})\]")
 
 
@@ -80,7 +82,7 @@ def convert(source_path, books):
         if is_book_heading(text):
             heading_since_verse = True
             continue
-        m = VERSE.match(text)
+        m = VERSE.match(HEBREW_LETTER.sub("", text))
         if not m:
             continue                      # texto solto (ex.: subscrições de cartas)
         items.append((int(m.group(1)), clean(m.group(2)), boundary, heading_since_verse))
