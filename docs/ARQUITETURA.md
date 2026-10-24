@@ -238,6 +238,22 @@ O app fixava `gemini-2.5-flash`, que o Google restringiu a contas que já o usav
 18/09/2026). O 404 caía no mesmo `SearchResult.Failure` de qualquer erro, e era falado como "pode
 ser a internet". A chave e a internet estavam funcionando.
 
+### Bíblia
+
+- Texto: Almeida, Edição Revista e Corrigida, Lisboa 1911, em domínio público (transcrição do
+  Distributed Proofreaders, eBook #62383 do Projeto Gutenberg). Fica em
+  `app/src/main/assets/biblia/almeida1911/<LIVRO>.txt` e **funciona sem internet**
+  (`bible/AssetBible.kt`).
+- A ARC atual (SBB 1969/2009) tem direitos autorais. Se a SBB autorizar, basta gerar outros arquivos
+  no mesmo formato e trocar o nome da tradução em `AssetBible`.
+- Referências faladas: `domain/BibleReference.kt` (livros e apelidos em `BibleBooks.kt`; aceita
+  números por extenso, "do 3 ao 10" e algarismos romanos).
+- Pronúncia: `OldSpelling` atualiza a grafia de 1911 só no texto falado.
+- Explicação: Gemini **sem** `google_search`, instruído a seguir uma linha evangélica tradicional e a
+  não inventar fatos. A Bela sempre diz antes que é uma explicação por inteligência artificial.
+- Geração: workflow **Gerar texto da Bíblia** baixa a fonte, confere o SHA-256, converte e valida:
+  66 livros, a quantidade de capítulos de cada um e a sequência dos versículos.
+
 ### Chaves de API
 
 Para uso pessoal, as chaves do Gemini e do YouTube entram no APK pelo GitHub Actions (secrets).

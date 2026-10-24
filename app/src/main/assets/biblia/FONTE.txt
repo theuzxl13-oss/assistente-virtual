@@ -1,0 +1,8 @@
+Texto bíblico: A Biblia Sagrada, contendo o Velho e o Novo Testamento, traduzida em portuguez
+por João Ferreira d'Almeida — Edição Revista e Corrigida (Lisboa, Deposito das Escripturas
+Sagradas, 1911; primeira edição 1900). Obra em domínio público.
+
+Transcrição feita por voluntários do Distributed Proofreaders (https://www.pgdp.net).
+Os arquivos desta pasta foram gerados por tools/biblia/converter.py, que retira apenas as
+chamadas de notas, as marcas de itálico, os títulos de seção e as notas de rodapé; o texto
+dos versículos não é alterado.

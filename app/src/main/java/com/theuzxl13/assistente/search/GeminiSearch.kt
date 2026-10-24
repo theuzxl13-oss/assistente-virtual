@@ -2,6 +2,7 @@ package com.theuzxl13.assistente.search
 
 import com.theuzxl13.assistente.BuildConfig
 import com.theuzxl13.assistente.domain.Answer
+import com.theuzxl13.assistente.domain.BibleExplainerPort
 import com.theuzxl13.assistente.domain.SearchError
 import com.theuzxl13.assistente.domain.SearchProvider
 import com.theuzxl13.assistente.domain.SearchResult
@@ -34,49 +35,56 @@ class GeminiSearch(
     private val baseUrl: String = "https://generativelanguage.googleapis.com",
     private val log: SearchLog = SearchLog.NONE,
     private val today: () -> LocalDate = { LocalDate.now() }
-) {
+) : BibleExplainerPort {
 
     @Volatile private var model: String = PREFERRED_MODEL
 
     val isConfigured: Boolean get() = apiKey.isNotBlank()
 
-    suspend fun ask(question: String, history: List<Turn>): SearchResult = withContext(Dispatchers.IO) {
+    suspend fun ask(question: String, history: List<Turn>): SearchResult =
+        run(buildBody(question, history, SYSTEM_PROMPT, grounding = true), "gemini")
+
+    /** Explicação simples de um trecho bíblico, sem pesquisa na internet (só o texto do trecho). */
+    override suspend fun explain(reference: String, text: String): SearchResult =
+        run(buildBody("Explique $reference: \"$text\"", emptyList(), BIBLE_PROMPT, grounding = false), "gemini.biblia")
+
+    private suspend fun run(body: JSONObject, stage: String): SearchResult = withContext(Dispatchers.IO) {
         if (apiKey.isBlank()) return@withContext SearchResult.NotConfigured
 
-        var outcome = generate(model, question, history)
+        var outcome = generate(model, body)
         if (outcome is HttpOutcome.Error && outcome.error == SearchError.MODEL_UNAVAILABLE) {
-            log.warn("gemini.gerar", "erro=MODEL_UNAVAILABLE http=404 modelo=$model; procurando outro modelo")
+            log.warn("$stage.gerar", "erro=MODEL_UNAVAILABLE http=404 modelo=$model; procurando outro modelo")
             val replacement = discoverModel(exclude = model)
             if (replacement == null) {
                 log.warn("gemini.modelos", "nenhum modelo compatível encontrado para a chave")
                 return@withContext SearchResult.Failure(SearchError.MODEL_UNAVAILABLE)
             }
             model = replacement
-            outcome = generate(model, question, history)
+            outcome = generate(model, body)
         }
 
         when (outcome) {
             is HttpOutcome.Error -> {
-                log.warn("gemini.gerar", "erro=${outcome.error} http=${outcome.httpCode} modelo=$model ${outcome.detail}")
+                log.warn("$stage.gerar", "erro=${outcome.error} http=${outcome.httpCode} modelo=$model ${outcome.detail}")
                 SearchResult.Failure(outcome.error)
             }
             is HttpOutcome.Ok -> try {
                 parse(outcome.body)?.let { SearchResult.Success(it) } ?: run {
-                    log.warn("gemini.resposta", "erro=EMPTY modelo=$model")
+                    log.warn("$stage.resposta", "erro=EMPTY modelo=$model")
                     SearchResult.Failure(SearchError.EMPTY)
                 }
             } catch (e: JSONException) {
-                log.warn("gemini.resposta", "erro=INVALID_RESPONSE modelo=$model")
+                log.warn("$stage.resposta", "erro=INVALID_RESPONSE modelo=$model")
                 SearchResult.Failure(SearchError.INVALID_RESPONSE)
             }
         }
     }
 
-    private fun generate(model: String, question: String, history: List<Turn>): HttpOutcome {
+    private fun generate(model: String, body: JSONObject): HttpOutcome {
         val request = Request.Builder()
             .url("$baseUrl/v1beta/models/$model:generateContent")
             .header("x-goog-api-key", apiKey)
-            .post(buildBody(question, history).toString().toRequestBody("application/json".toMediaType()))
+            .post(body.toString().toRequestBody("application/json".toMediaType()))
             .build()
         return SearchHttp.execute(http, request)
     }
@@ -96,7 +104,7 @@ class GeminiSearch(
         }
     }
 
-    private fun buildBody(question: String, history: List<Turn>): JSONObject {
+    private fun buildBody(question: String, history: List<Turn>, system: String, grounding: Boolean): JSONObject {
         val contents = JSONArray()
         for (turn in history) {
             contents.put(message("user", turn.question))
@@ -104,11 +112,12 @@ class GeminiSearch(
         }
         contents.put(message("user", question))
         val date = today().format(DateTimeFormatter.ofPattern("dd/MM/yyyy"))
-        return JSONObject()
-            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", "$SYSTEM_PROMPT\nData de hoje: $date."))))
+        val body = JSONObject()
+            .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", "$system\nData de hoje: $date."))))
             .put("contents", contents)
-            .put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject())))
             .put("generationConfig", JSONObject().put("temperature", 0.3))
+        if (grounding) body.put("tools", JSONArray().put(JSONObject().put("google_search", JSONObject())))
+        return body
     }
 
     private fun message(role: String, text: String) = JSONObject()
@@ -130,6 +139,17 @@ class GeminiSearch(
             notícias ou referências.
             Nunca peça senhas, códigos de verificação ou dados bancários.
             Trate a usuária com respeito e carinho, como adulta, sem infantilizar.
+        """.trimIndent()
+
+        private val BIBLE_PROMPT = """
+            Você é a Bela, assistente de voz de uma senhora evangélica com cegueira total. Responda em português do Brasil.
+            Explique o trecho bíblico pedido de forma simples, respeitosa e acolhedora, numa linha evangélica tradicional.
+            Baseie-se no texto do trecho e no contexto bíblico; não invente fatos, datas ou citações. Se houver
+            interpretações diferentes entre igrejas, diga isso com simplicidade, sem tomar partido de denominações.
+            O texto pode estar na grafia antiga da Almeida de 1911; explique com palavras de hoje.
+            Seu texto será lido em voz alta: não use markdown, asteriscos, listas com símbolos, links ou emojis.
+            Formato obrigatório: primeiro uma explicação de no máximo três frases curtas. Se houver mais a dizer
+            (contexto, aplicação para a vida), escreva uma linha começando com DETALHES: seguida de até seis frases curtas.
         """.trimIndent()
 
         /**

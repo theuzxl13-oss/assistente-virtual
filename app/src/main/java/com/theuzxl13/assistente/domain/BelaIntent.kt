@@ -49,6 +49,12 @@ sealed class BelaIntent {
     data object VolumeUp : BelaIntent()
     data object VolumeDown : BelaIntent()
     data class OpenApp(val name: String) : BelaIntent()
+    /** "Leia 1 Pedro 5,7", "Salmo 23". */
+    data class ReadBible(val reference: BibleReference) : BelaIntent()
+    /** "Explica pra mim", "o que significa?". */
+    data object Explain : BelaIntent()
+    /** "Próximo capítulo". */
+    data object NextChapter : BelaIntent()
     /** "Leia esse texto": lê o que foi compartilhado com a Bela por outro app. */
     data object ReadShared : BelaIntent()
 

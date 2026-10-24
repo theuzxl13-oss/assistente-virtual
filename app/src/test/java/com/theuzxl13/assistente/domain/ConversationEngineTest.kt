@@ -107,6 +107,20 @@ class ConversationEngineTest {
         override fun openAssistantSettings() = true
     }
 
+    private class FakeBible : BiblePort {
+        override val translationName = "Almeida, edição Revista e Corrigida de 1911"
+        val chapters = mapOf(
+            "1PE" to mapOf(5 to (1..14).map { if (it == 7) "Lançando sobre elle toda a vossa solicitude, porque elle tem cuidado de vós." else "Versículo $it." }),
+            "PSA" to mapOf(23 to (1..6).map { "Verso $it do salmo." })
+        )
+        override suspend fun chapter(bookId: String, chapter: Int) = chapters[bookId]?.get(chapter)
+    }
+
+    private class FakeExplainer(var result: SearchResult) : BibleExplainerPort {
+        val asked = mutableListOf<String>()
+        override suspend fun explain(reference: String, text: String): SearchResult { asked += "$reference|$text"; return result }
+    }
+
     private class FakePrefs : PreferencesPort {
         override var speechRate = 1f
         override var onboardingDone = false
@@ -130,8 +144,13 @@ class ConversationEngineTest {
         listOf(InstalledApp("WhatsApp", "com.whatsapp"), InstalledApp("YouTube", "com.google.android.youtube"))
     )
 
+    private val explainer = FakeExplainer(
+        SearchResult.Success(Answer("Deus cuida de nós; podemos entregar a Ele nossas preocupações.", "Pedro escrevia a cristãos perseguidos.", emptyList()))
+    )
+
     private fun engine(input: FakeInput) = ConversationEngine(
         speech, input, NoSounds, permissions, contacts, phone, media, search, apps, device, FakePrefs(),
+        bible = FakeBible(), explainer = explainer,
         now = { ZonedDateTime.of(2026, 10, 20, 14, 5, 0, 0, ZoneId.of("America/Sao_Paulo")) },
         wait = {}
     ).also { it.onStateChanged = { s -> states += s } }
@@ -400,6 +419,60 @@ class ConversationEngineTest {
         assertEquals("O serviço de pesquisa precisa ser configurado neste aplicativo.", speech.spoken[1])
         assertEquals("https://www.google.com/search?hl=pt-BR&q=como+usar+o+WhatsApp", device.opened.single())
         assertTrue(speech.spoken.last().contains("eu não li esses resultados"))
+    }
+
+    @Test
+    fun `le o versiculo com a referencia e a traducao`() = runTest {
+        engine(FakeInput("Bela, leia 1 Pedro 5,7")).runSession()
+        assertEquals(
+            "Na tradução de Almeida, edição Revista e Corrigida de 1911. Primeira carta de Pedro, capítulo 5, versículo 7.",
+            speech.spoken[0]
+        )
+        assertEquals("Lançando sobre ele toda a vossa solicitude, porque ele tem cuidado de vós.", speech.spoken[1])
+        assertEquals("Quer uma explicação, o próximo versículo ou o capítulo inteiro?", speech.spoken[2])
+    }
+
+    @Test
+    fun `explica avisando que e inteligencia artificial e depois segue para o proximo versiculo`() = runTest {
+        engine(FakeInput("leia 1 Pedro 5 7", "explica pra mim", "mais detalhes", "próximo versículo")).runSession()
+        assertTrue(explainer.asked.single().startsWith("Primeira carta de Pedro, capítulo 5, versículo 7|7 Lançando sobre elle"))
+        assertTrue(speech.spoken.contains(
+            "Esta explicação foi feita por inteligência artificial; não faz parte da Bíblia. Deus cuida de nós; podemos entregar a Ele nossas preocupações."
+        ))
+        assertTrue(speech.spoken.contains("Quer mais detalhes da explicação, uma explicação, o próximo versículo ou o capítulo inteiro?"))
+        assertTrue(speech.spoken.contains("Pedro escrevia a cristãos perseguidos."))
+        assertTrue(speech.spoken.contains("Versículo 8. Versículo 8."))
+    }
+
+    @Test
+    fun `salmo inteiro e lido com numeros`() = runTest {
+        engine(FakeInput("salmo vinte e três")).runSession()
+        assertEquals("Na tradução de Almeida, edição Revista e Corrigida de 1911. Salmo 23.", speech.spoken[0])
+        assertTrue(speech.spoken[1].startsWith("1. Verso 1 do salmo. 2. Verso 2"))
+        assertEquals("Fim do capítulo.", speech.spoken[2])
+        assertEquals("Quer uma explicação ou o próximo capítulo?", speech.spoken[3])
+    }
+
+    @Test
+    fun `versiculo que nao existe nao inventa texto`() = runTest {
+        engine(FakeInput("1 Pedro 5 40")).runSession()
+        assertEquals("Primeira carta de Pedro, capítulo 5 tem 14 versículos. Qual versículo você quer ouvir?", speech.spoken[0])
+    }
+
+    @Test
+    fun `explicacao sem internet avisa e a leitura continua disponivel`() = runTest {
+        engine(FakeInput("leia 1 Pedro 5 7")).runSession()
+        device.online = false
+        engine(FakeInput("leia 1 Pedro 5 7", "explica")).runSession()
+        assertTrue(speech.spoken.any { it.startsWith("Para buscar uma explicação eu preciso de internet.") })
+        assertTrue(explainer.asked.isEmpty())
+    }
+
+    @Test
+    fun `erro na explicacao fala o motivo`() = runTest {
+        explainer.result = SearchResult.Failure(SearchError.RATE_LIMITED)
+        engine(FakeInput("leia 1 Pedro 5 7", "o que significa")).runSession()
+        assertTrue(speech.spoken.contains("O limite de uso do serviço de explicações foi atingido."))
     }
 
     @Test

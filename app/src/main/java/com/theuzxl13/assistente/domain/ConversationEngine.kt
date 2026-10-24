@@ -36,6 +36,8 @@ class ConversationEngine(
     private val apps: AppsPort,
     private val device: DevicePort,
     private val prefs: PreferencesPort,
+    private val bible: BiblePort = NoBible,
+    private val explainer: BibleExplainerPort = NoBibleExplainer,
     private val now: () -> ZonedDateTime = { ZonedDateTime.now() },
     private val wait: suspend (Long) -> Unit = { delay(it) }
 ) {
@@ -53,6 +55,9 @@ class ConversationEngine(
     private var lastMedia: MediaList? = null
     /** Última pesquisa, para "próximo resultado", "abra no navegador" e "tente de novo". */
     private var lastSearch: SearchSession? = null
+    /** Último trecho bíblico lido, para "explica", "próximo versículo", "próximo capítulo". */
+    private var lastBible: BibleSession? = null
+    private var bibleTranslationAnnounced = false
 
     private sealed class Pending(val question: String) {
         class ConfirmCall(val contact: Contact, question: String) : Pending(question)
@@ -64,10 +69,25 @@ class ConversationEngine(
         class ConfirmAnswer(question: String) : Pending(question)
         class SearchResults(val search: SearchSession, question: String) : Pending(question)
         class SearchFailed(val spokenQuestion: String, question: String) : Pending(question)
+        class BibleReading(val session: BibleSession, question: String) : Pending(question)
+        class BibleContinue(val session: BibleSession, question: String) : Pending(question)
         class ContinueReading(val remaining: String, question: String) : Pending(question)
     }
 
     private class MediaList(val items: List<MediaItem>, var batchStart: Int = 0, var playedIndex: Int = -1)
+
+    /** Trecho bíblico sendo lido: versículos [first]..[last] do capítulo. */
+    private class BibleSession(
+        val book: BibleBook,
+        var chapter: Int,
+        var verses: List<String>,
+        var first: Int,
+        var last: Int,
+        var explanationDetails: String = ""
+    ) {
+        val reference: BibleReference get() = BibleReference(book, chapter, first, last)
+        val wholeChapter: Boolean get() = first == 1 && last == verses.size
+    }
 
     /** Resultados de uma pesquisa e qual deles está sendo lido. */
     private class SearchSession(val spokenQuestion: String, val answer: Answer, var index: Int = 0, var detailsRead: Boolean = false) {
@@ -253,6 +273,38 @@ class ConversationEngine(
                 else -> { pending = null; dispatch(intent) } // pergunta de acompanhamento
             }
 
+            is Pending.BibleReading -> when (intent) {
+                BelaIntent.Explain, BelaIntent.Yes -> { pending = null; explainBible(waiting.session) }
+                BelaIntent.Another, BelaIntent.NextMedia -> { pending = null; nextVerse(waiting.session) }
+                BelaIntent.Details -> {
+                    pending = null
+                    val session = waiting.session
+                    if (session.explanationDetails.isNotBlank()) {
+                        say(session.explanationDetails)
+                        session.explanationDetails = ""
+                        ask(Pending.BibleReading(session, bibleFollowUp(session)))
+                    } else {
+                        readBibleChapter(session.book, session.chapter, session.verses, from = 1)
+                    }
+                }
+                BelaIntent.NextChapter -> { pending = null; nextChapter(waiting.session) }
+                BelaIntent.No -> { pending = null; say("Tudo bem."); Next.LISTEN }
+                else -> { pending = null; dispatch(intent) }
+            }
+
+            is Pending.BibleContinue -> when (intent) {
+                BelaIntent.Yes, BelaIntent.Another, BelaIntent.Details, BelaIntent.ResumeMedia -> {
+                    pending = null
+                    val s = waiting.session
+                    readBibleChapter(s.book, s.chapter, s.verses, from = s.last + 1)
+                }
+                BelaIntent.No -> {
+                    pending = null
+                    ask(Pending.BibleReading(waiting.session, "Tudo bem, parei. " + bibleFollowUp(waiting.session)))
+                }
+                else -> { pending = null; dispatch(intent) }
+            }
+
             is Pending.SearchFailed -> when (intent) {
                 BelaIntent.Yes, BelaIntent.Retry -> { pending = null; answerQuestion(waiting.spokenQuestion) }
                 BelaIntent.OpenInBrowser -> { pending = null; openWebSearch(waiting.spokenQuestion) }
@@ -332,6 +384,11 @@ class ConversationEngine(
             Next.LISTEN
         }
         is BelaIntent.OpenApp -> openApp(intent.name)
+        is BelaIntent.ReadBible -> readBible(intent.reference)
+        BelaIntent.Explain -> lastBible?.let { explainBible(it) }
+            ?: run { say("O que você quer que eu explique? Peça um versículo, por exemplo: leia João 3, 16."); Next.LISTEN }
+        BelaIntent.NextChapter -> lastBible?.let { nextChapter(it) }
+            ?: run { say("Qual livro e capítulo da Bíblia você quer ouvir?"); Next.LISTEN }
         BelaIntent.ReadShared -> readShared()
 
         is BelaIntent.Ask -> answerQuestion(intent.question)
@@ -803,6 +860,99 @@ class ConversationEngine(
         return ask(Pending.SearchFailed(question, offer))
     }
 
+    // ------------------------------------------------------------------ Bíblia
+
+    private suspend fun readBible(ref: BibleReference): Next {
+        val verses = bible.chapter(ref.book.id, ref.chapter)
+            ?: return fail("Não consegui abrir esse trecho da Bíblia.")
+        val start = ref.verseStart ?: return readBibleChapter(ref.book, ref.chapter, verses, from = 1)
+        if (start > verses.size) {
+            say("${BibleReference(ref.book, ref.chapter).spoken()} tem ${verses.size} versículos. Qual versículo você quer ouvir?")
+            return Next.LISTEN
+        }
+        val end = minOf(ref.verseEnd ?: start, verses.size)
+        val session = BibleSession(ref.book, ref.chapter, verses, start, end)
+        lastBible = session
+        say(translationIntro() + BibleReference(ref.book, ref.chapter, start, end).spoken() + ".")
+        say(versesForSpeech(verses, start, end))
+        return ask(Pending.BibleReading(session, bibleFollowUp(session)))
+    }
+
+    /** Lê o capítulo em partes de [BIBLE_CHUNK_VERSES] versículos, perguntando se continua. */
+    private suspend fun readBibleChapter(book: BibleBook, chapter: Int, verses: List<String>, from: Int): Next {
+        val to = minOf(from + BIBLE_CHUNK_VERSES - 1, verses.size)
+        val session = BibleSession(book, chapter, verses, from, to)
+        lastBible = session
+        if (from == 1) say(translationIntro() + BibleReference(book, chapter).spoken() + ".")
+        say(versesForSpeech(verses, from, to, numbered = true))
+        if (to < verses.size) return ask(Pending.BibleContinue(session, "Quer que eu continue lendo?"))
+        session.first = 1
+        say("Fim do capítulo.")
+        return ask(Pending.BibleReading(session, bibleFollowUp(session)))
+    }
+
+    private suspend fun nextVerse(session: BibleSession): Next {
+        if (session.last >= session.verses.size) return nextChapter(session)
+        val n = session.last + 1
+        val next = BibleSession(session.book, session.chapter, session.verses, n, n)
+        lastBible = next
+        say("Versículo $n. " + versesForSpeech(session.verses, n, n))
+        return ask(Pending.BibleReading(next, bibleFollowUp(next)))
+    }
+
+    private suspend fun nextChapter(session: BibleSession): Next {
+        val chapter = session.chapter + 1
+        if (chapter > session.book.chapters) {
+            say("Esse é o último capítulo de ${session.book.spokenName}. Qual livro você quer ouvir agora?")
+            return Next.LISTEN
+        }
+        val verses = bible.chapter(session.book.id, chapter) ?: return fail("Não consegui abrir esse trecho da Bíblia.")
+        return readBibleChapter(session.book, chapter, verses, from = 1)
+    }
+
+    private suspend fun explainBible(session: BibleSession): Next {
+        if (!device.isOnline()) {
+            say("Para buscar uma explicação eu preciso de internet. A leitura da Bíblia funciona sem internet.")
+            return ask(Pending.BibleReading(session, bibleFollowUp(session)))
+        }
+        say("Vou buscar uma explicação. Só um instante.")
+        setState(ConversationState.PROCESSANDO)
+        val text = (session.first..session.last).joinToString(" ") { "$it ${session.verses[it - 1]}" }
+        when (val result = explainer.explain(session.reference.spoken(), text)) {
+            is SearchResult.Success -> {
+                say("Esta explicação foi feita por inteligência artificial; não faz parte da Bíblia. " + result.answer.summary)
+                session.explanationDetails = result.answer.details
+            }
+            SearchResult.NotConfigured -> say("A explicação precisa do serviço de inteligência artificial, que não está configurado neste aplicativo.")
+            is SearchResult.Failure -> {
+                sounds.error()
+                say(explainErrorMessage(result.error))
+            }
+        }
+        return ask(Pending.BibleReading(session, bibleFollowUp(session)))
+    }
+
+    private fun bibleFollowUp(session: BibleSession): String {
+        val options = mutableListOf("uma explicação")
+        if (session.explanationDetails.isNotBlank()) options.add(0, "mais detalhes da explicação")
+        if (session.last < session.verses.size) options += "o próximo versículo"
+        if (!session.wholeChapter) options += "o capítulo inteiro"
+        if (session.wholeChapter || session.last >= session.verses.size) options += "o próximo capítulo"
+        return "Quer ${PtBr.joinSpoken(options).replace(" e ", " ou ")}?"
+    }
+
+    private fun translationIntro(): String {
+        if (bibleTranslationAnnounced || bible.translationName.isBlank()) return ""
+        bibleTranslationAnnounced = true
+        return "Na tradução de ${bible.translationName}. "
+    }
+
+    private fun versesForSpeech(verses: List<String>, from: Int, to: Int, numbered: Boolean = from != to): String =
+        (from..to).joinToString(" ") { n ->
+            val text = OldSpelling.forSpeech(verses[n - 1])
+            if (numbered) "$n. $text" else text
+        }
+
     // ------------------------------------------------------------------ utilidades
 
     private suspend fun ensurePermission(group: PermissionGroup, reason: String): Boolean {
@@ -870,8 +1020,19 @@ class ConversationEngine(
         val CAPABILITIES_TEXT =
             "Eu posso: ligar para seus contatos, atender ou recusar ligações e dizer quem está ligando; " +
                 "tocar músicas e louvores do YouTube; pesquisar na internet e ler a resposta; dizer as horas e a data; " +
-                "abrir aplicativos; aumentar ou diminuir o volume; e ler textos que você compartilhar comigo. " +
+                "abrir aplicativos; aumentar ou diminuir o volume; ler a Bíblia, como: leia João 3, 16; e ler textos que você compartilhar comigo. " +
                 "Também posso repetir, falar mais devagar ou mais rápido. O que você quer fazer?"
+
+        const val BIBLE_CHUNK_VERSES = 10
+
+        internal fun explainErrorMessage(error: SearchError): String = when (error) {
+            SearchError.NO_CONNECTION, SearchError.DNS -> "Não consegui me conectar ao serviço de explicações."
+            SearchError.TIMEOUT -> "A explicação demorou demais."
+            SearchError.UNAUTHORIZED -> "O serviço de explicações recusou a chave de acesso do aplicativo."
+            SearchError.MODEL_UNAVAILABLE -> "O serviço de explicações não está disponível para esta chave."
+            SearchError.RATE_LIMITED -> "O limite de uso do serviço de explicações foi atingido."
+            else -> "Não consegui buscar uma explicação agora."
+        }
 
         /** Mensagem falada para cada erro real da pesquisa. */
         internal fun errorMessage(error: SearchError): String = when (error) {

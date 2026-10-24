@@ -20,6 +20,8 @@ botões pequenos.
 | "Que horas são?" · "Que dia é hoje?" | responde, mesmo sem internet |
 | "Abra o WhatsApp" · "Aumente o volume" | abre o app e ajusta o volume |
 | Compartilhar um texto com a Bela | lê em voz alta, em partes |
+| "Leia 1 Pedro 5,7" · "Salmo 23" · "João 3:16" · "Mateus 5, do 3 ao 10" | lê da Bíblia guardada no app (funciona sem internet) |
+| "Explica pra mim" · "Próximo versículo" · "O capítulo inteiro" · "Próximo capítulo" | explicação por IA (avisando que não é texto bíblico) e navegação pela Bíblia |
 | "Pare" · "Cancele" · "Repita" · "Fale mais devagar/rápido" · "Não entendi" · "Me ajude" · "Volte" · "O que posso fazer?" | controla a conversa a qualquer momento |
 
 Ela **nunca diz que fez algo sem verificar** (por exemplo, só considera a ligação iniciada quando o
@@ -78,6 +80,19 @@ perto nesse momento.
 2. Toque no arquivo e permita "instalar apps desconhecidos" para o app usado para abrir.
 3. Se aparecer "App não instalado", desinstale a versão anterior: cada APK de teste sai assinado com
    uma chave diferente.
+
+## Bíblia
+
+O texto é a **Almeida, Edição Revista e Corrigida de 1911** (Lisboa), em domínio público. É a revisão
+que deu origem à ARC atual; as edições de 1969 e 2009 da Sociedade Bíblica do Brasil têm direitos
+autorais e não podem ser embutidas no app sem autorização. O texto vem da transcrição do Distributed
+Proofreaders e é convertido por `tools/biblia/converter.py` (workflow **Gerar texto da Bíblia**),
+que confere a quantidade de capítulos de todos os 66 livros. Ver `app/src/main/assets/biblia/FONTE.txt`.
+
+- A grafia de 1911 ("Christo", "elle", "fructo") é atualizada **só na hora de falar**, para a voz
+  pronunciar certo; o texto guardado não muda.
+- A explicação usa o Gemini sem pesquisa na internet, numa linha evangélica, e a Bela sempre avisa
+  que é uma explicação por inteligência artificial e não faz parte da Bíblia.
 
 ## Documentação
 

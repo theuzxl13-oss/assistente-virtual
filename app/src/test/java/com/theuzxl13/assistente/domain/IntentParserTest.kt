@@ -126,6 +126,21 @@ class IntentParserTest {
     }
 
     @Test
+    fun `biblia`() {
+        assertTrue(parse("Bela, leia 1 Pedro 5,7") is BelaIntent.ReadBible)
+        assertTrue(parse("salmo 23") is BelaIntent.ReadBible)
+        assertTrue(parse("quero ouvir o salmo 23") is BelaIntent.ReadBible)
+        assertTrue(parse("toque o louvor salmo 23") is BelaIntent.PlayMedia)
+        assertEquals(BelaIntent.Explain, parse("explica pra mim"))
+        assertEquals(BelaIntent.Explain, parse("o que significa esse versículo"))
+        assertEquals(BelaIntent.Explain, parse("uma explicação"))
+        assertEquals(BelaIntent.Another, parse("próximo versículo"))
+        assertEquals(BelaIntent.NextChapter, parse("próximo capítulo"))
+        assertEquals(BelaIntent.Details, parse("o capítulo inteiro"))
+        assertEquals(BelaIntent.NotUnderstood, parse("explica de novo"))
+    }
+
+    @Test
     fun `numeros so viram escolha quando ha lista`() {
         assertTrue(parse("um") !is BelaIntent.Choice)
         assertEquals(BelaIntent.Empty, parse("Bela"))

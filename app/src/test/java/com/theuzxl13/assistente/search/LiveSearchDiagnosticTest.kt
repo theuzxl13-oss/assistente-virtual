@@ -63,6 +63,18 @@ class LiveSearchDiagnosticTest {
             }
             line("Ponta a ponta \"$phrase\" -> $text")
         }
+        // Explicação bíblica: Gemini SEM google_search (o plano gratuito recusou a pesquisa com 429).
+        val explanation = kotlinx.coroutines.runBlocking {
+            GeminiSearch(log = searchLog).explain(
+                "Primeira carta de Pedro, capítulo 5, versículo 7",
+                "7 Lançando sobre elle toda a vossa solicitude, porque elle tem cuidado de vós."
+            )
+        }
+        line("Explicação de 1 Pedro 5,7 -> " + when (explanation) {
+            is com.theuzxl13.assistente.domain.SearchResult.Success -> "OK | ${explanation.answer.summary.take(200)}"
+            is com.theuzxl13.assistente.domain.SearchResult.Failure -> "FALHA ${explanation.error}"
+            com.theuzxl13.assistente.domain.SearchResult.NotConfigured -> "NÃO CONFIGURADO"
+        })
         // Sem chave do Gemini: a pesquisa precisa continuar funcionando pela Wikipédia/Notícias.
         val noKey = WebSearch(GeminiSearch(apiKey = ""), WikipediaSearch(), NewsSearch())
         val r = kotlinx.coroutines.runBlocking { noKey.ask("quem foi Moisés", emptyList()) }

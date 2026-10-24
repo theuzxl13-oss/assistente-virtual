@@ -148,6 +148,29 @@ interface SearchPort {
     suspend fun ask(question: String, history: List<Turn>): SearchResult
 }
 
+// ---------------- Bíblia ----------------
+
+interface BiblePort {
+    /** Nome da tradução, para a Bela dizer de onde é o texto. */
+    val translationName: String
+    /** Versículos do capítulo (índice 0 = versículo 1), ou null se não existir. */
+    suspend fun chapter(bookId: String, chapter: Int): List<String>?
+}
+
+/** Explicação de um trecho bíblico (gerada por IA; a Bela sempre avisa que não é texto bíblico). */
+interface BibleExplainerPort {
+    suspend fun explain(reference: String, text: String): SearchResult
+}
+
+object NoBible : BiblePort {
+    override val translationName = ""
+    override suspend fun chapter(bookId: String, chapter: Int): List<String>? = null
+}
+
+object NoBibleExplainer : BibleExplainerPort {
+    override suspend fun explain(reference: String, text: String): SearchResult = SearchResult.NotConfigured
+}
+
 // ---------------- Aplicativos e aparelho ----------------
 
 data class InstalledApp(val label: String, val packageName: String)

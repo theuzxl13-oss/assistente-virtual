@@ -28,6 +28,8 @@ object IntentParser {
             CANCEL.matches(s) -> BelaIntent.Cancel
             REPEAT.matches(s) -> BelaIntent.Repeat
             NOT_UNDERSTOOD.containsMatchIn(s) -> BelaIntent.NotUnderstood
+            EXPLAIN.matches(s) -> BelaIntent.Explain
+            NEXT_CHAPTER.matches(s) -> BelaIntent.NextChapter
             SLOWER.containsMatchIn(s) -> BelaIntent.SpeakSlower
             FASTER.containsMatchIn(s) -> BelaIntent.SpeakFaster
             BACK.matches(s) -> BelaIntent.Back
@@ -58,6 +60,7 @@ object IntentParser {
 
             else -> parseEmergency(s)
                 ?: parseCall(s)
+                ?: parseBible(raw, s)
                 ?: parseMedia(s)
                 ?: parseOpenApp(s)
                 ?: BelaIntent.Ask(stripWakeWordFromRaw(raw))
@@ -111,6 +114,12 @@ object IntentParser {
             .replace(Regex("\\s+agora$"), "")
             .trim()
         return if (name.isEmpty()) BelaIntent.CallWithoutName else BelaIntent.Call(name)
+    }
+
+    /** Referência bíblica ("1 Pedro 5,7", "Salmo 23"), a não ser que seja pedido de música. */
+    private fun parseBible(raw: String, s: String): BelaIntent? {
+        if (Regex("\\b(?:musica|louvor|hino|youtube|cantar|cante)\\b").containsMatchIn(s)) return null
+        return BibleReferenceParser.parse(raw)?.let { BelaIntent.ReadBible(it) }
     }
 
     private fun parseMedia(s: String): BelaIntent? {
@@ -169,11 +178,15 @@ object IntentParser {
         "(?:nao|nao quero|nao obrigad[oa]|negativo|errado|nao e esse|nao e essa|nao e|nenhum|nenhuma|nenhum deles|nao e nenhum)"
     )
     private val ANOTHER = Regex(
-        "(?:(?:o |a )?proxim[oa] (?:resultado|noticia|fonte|site)|(?:o |a )?proxim[oa]|outr[oa] (?:resultado|noticia|fonte)|outr[oa]|quero (?:ouvir |escutar )?outr[oa]|outra (?:musica|opcao)|outro (?:video|louvor|hino)|mais um|mais uma|tem outr[oa])"
+        "(?:(?:o |a )?proxim[oa] (?:resultado|noticia|fonte|site|versiculo)|versiculo seguinte|(?:o |a )?proxim[oa]|outr[oa] (?:resultado|noticia|fonte)|outr[oa]|quero (?:ouvir |escutar )?outr[oa]|outra (?:musica|opcao)|outro (?:video|louvor|hino)|mais um|mais uma|tem outr[oa])"
     )
     private val DETAILS = Regex(
-        "$POLITE(?:mais detalhes|detalhes|leia tudo|le tudo|leitura completa|a leitura completa|completa|tudo|leia mais|fala mais|fale mais|quero saber mais|continue lendo|continua lendo|explica melhor)(?: por favor)?"
+        "$POLITE(?:mais detalhes|detalhes|leia tudo|le tudo|leitura completa|a leitura completa|completa|tudo|leia mais|fala mais|fale mais|quero saber mais|continue lendo|continua lendo|(?:leia |le |ler )?o capitulo(?: inteiro| todo| completo)?|capitulo (?:inteiro|todo|completo))(?: por favor)?"
     )
+    private val EXPLAIN = Regex(
+        "$POLITE(?:me )?(?:explic(?:a|ar)|explique)(?: (?:pra|para) mim)?(?: (?:isso|esse versiculo|este versiculo|o versiculo|esse texto|essa passagem|esse capitulo|ele))?(?: (?:pra|para) mim)?|o que (?:isso |esse versiculo |este versiculo |essa passagem |ele )?(?:significa|quer dizer)(?: isso| esse versiculo| este versiculo| essa passagem| esse texto)?|qual (?:e )?o significado(?: disso| desse versiculo| dessa passagem)?|(?:quero|uma) explicacao"
+    )
+    private val NEXT_CHAPTER = Regex("(?:(?:o |a )?proximo capitulo|capitulo seguinte|(?:leia|le|ler) o proximo capitulo)")
     private val OPEN_IN_BROWSER = Regex(
         "$POLITE(?:abr(?:a|e|ir)|mostr(?:a|e|ar)|ve[jr]a?)(?: (?:isso|esse|essa|este|esta|ele|ela|o resultado|a pagina|o site|a noticia|a pesquisa|os resultados))? (?:no|pelo|na) (?:navegador|chrome|google|internet|tela)|abr(?:a|e|ir) (?:a pagina|o site|o link|a noticia|o resultado|os resultados)"
     )

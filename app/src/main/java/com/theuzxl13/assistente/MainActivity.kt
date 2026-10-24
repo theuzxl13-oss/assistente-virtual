@@ -12,6 +12,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.theuzxl13.assistente.apps.AndroidApps
+import com.theuzxl13.assistente.bible.AssetBible
 import com.theuzxl13.assistente.contacts.AndroidContacts
 import com.theuzxl13.assistente.databinding.ActivityMainBinding
 import com.theuzxl13.assistente.device.AndroidDevice
@@ -72,6 +73,7 @@ class MainActivity : AppCompatActivity() {
         val device = AndroidDevice(this)
         // Registro técnico da pesquisa (logcat, tag "BelaPesquisa"): etapa e código do erro, sem a pergunta nem a chave.
         val searchLog = SearchLog { stage, detail -> Log.w("BelaPesquisa", "etapa=$stage $detail") }
+        val gemini = GeminiSearch(log = searchLog)
 
         engine = ConversationEngine(
             speech = speech,
@@ -81,10 +83,12 @@ class MainActivity : AppCompatActivity() {
             contacts = AndroidContacts(this),
             phone = AndroidPhone(this),
             media = YouTubeMedia(this),
-            search = WebSearch(GeminiSearch(log = searchLog), WikipediaSearch(log = searchLog), NewsSearch(log = searchLog), searchLog),
+            search = WebSearch(gemini, WikipediaSearch(log = searchLog), NewsSearch(log = searchLog), searchLog),
             apps = AndroidApps(this),
             device = device,
-            prefs = prefs
+            prefs = prefs,
+            bible = AssetBible(this),
+            explainer = gemini
         )
         engine.onStateChanged = { state -> runOnUiThread { render(state) } }
         onboarding = Onboarding(speech, input, sounds, permissions, device, prefs)

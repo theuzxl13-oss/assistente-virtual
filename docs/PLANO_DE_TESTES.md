@@ -13,6 +13,7 @@ O APK só é gerado se todos passarem (`gradle testDebugUnitTest`).
 | `PtBrTest` | horas, datas e listas faladas corretamente |
 | `GeminiSearchParseTest` | separação resumo/detalhes, fontes sem repetição, resposta sem fonte, resposta vazia, escolha de modelo pela lista real da chave |
 | `SearchClientsTest` | com servidor falso (MockWebServer): modelo aposentado (corpo 404 real) → troca de modelo; HTTP 400 de chave/401/403/429/500/503/outros 4xx; timeout; conexão recusada; DNS; conexão que cai; JSON inválido; resposta vazia; sem chave; Wikipédia (resumo, detalhes, lista, sem resultado, resumo que falha); Google Notícias (RSS, assunto, XML inválido); Gemini falhando e Wikipédia respondendo; chave nunca aparece no log |
+| `BibleReferenceTest` | referências faladas e escritas (1 Pedro 5,7; primeira de Pedro capítulo cinco versículo sete; Salmo vinte e três; Mateus 5 do 3 ao 10; I Coríntios 13), referência inexistente, grafia de 1911 para a fala |
 | `SearchQueryTest` | "pesquise no Google…" vira a pergunta; assunto para a enciclopédia; notícias com e sem assunto |
 | `LiveSearchDiagnosticTest` | **chamadas reais** (só no passo "Diagnóstico da pesquisa" do CI): Gemini, lista de modelos da chave, Wikipédia, Google Notícias e as 4 frases de exemplo pelas classes do app, ponta a ponta |
 | `YouTubeTitleTest` | títulos limpos para ouvir ("(Clipe Oficial)", "[HD]", "\| Ao Vivo", entidades HTML) |
@@ -75,6 +76,11 @@ depois ligado**.
 - [ ] "Pesquise no Google como usar o WhatsApp": resposta com fonte.
 - [ ] Modo avião: "o celular não está conectado a nenhuma rede". Wi-Fi sem internet de verdade: mensagem de conexão/DNS/timeout, **não** "pesquisa não configurada".
 - [ ] Depois de um erro: "tente de novo" pesquisa de novo; "abra no navegador" abre o Google e ela avisa que não leu os resultados.
+- [ ] "Leia 1 Pedro 5,7": diz a tradução (só na primeira vez), a referência e o versículo; oferece explicação, próximo versículo, capítulo inteiro.
+- [ ] "Primeira de Pedro, capítulo cinco, versículo sete" e "Salmo vinte e três" funcionam falados por extenso.
+- [ ] "Explica pra mim": avisa que é explicação por inteligência artificial. Sem internet: diz que precisa de internet e a leitura continua.
+- [ ] "Salmo 119": lê de 10 em 10 versículos e pergunta se continua; "não" para.
+- [ ] Modo avião: "leia João 3,16" funciona.
 - [ ] `adb logcat -s BelaPesquisa` mostra a etapa e o código do erro, sem a pergunta nem a chave.
 - [ ] Pergunta de acompanhamento ("e sem glúten?") usa o contexto.
 - [ ] Sem internet: pesquisa e música avisam; hora, ligação e apps funcionam.
