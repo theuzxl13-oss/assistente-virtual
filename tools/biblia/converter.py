@@ -18,7 +18,7 @@ from collections import OrderedDict
 
 VERSE = re.compile(r"^(\d{1,3}) (.+)$", re.S)
 # Lamentações e Salmo 119 são acrósticos: o versículo vem depois da letra hebraica ("ALEPH. 3 Eu sou...").
-HEBREW_LETTER = re.compile(r"^(?:ALEPH|BETH|GIMEL|DALETH|HE|VAU|ZAIN|CHETH|HETH|TETH|JOD|IOD|CAPH|LAMED|MEM|NUN|SAMECH|AIN|PE|TSADE|TZADE|KOPH|COPH|RESH|SCHIN|SHIN|TAU|THAU)\.\s+")
+HEBREW_LETTER = re.compile(r"^[A-ZÇ]{2,8}\.\s+(?=(?:\[[^\]]+\]\s*)*\d{1,3} )")
 # Chamada de nota antes do número do versículo: "[3] 3 Judah passou..." (não confundir com a nota "[3] Jer. 6.25").
 LEADING_NOTE = re.compile(r"^(?:\[(?:\d{1,3}|[A-Z]{1,2})\]\s*)+(?=\d{1,3} )")
 NOTE_MARK = re.compile(r"\s*\[(?:\d{1,3}|[A-Z]{1,2})\]")
