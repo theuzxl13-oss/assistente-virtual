@@ -123,6 +123,14 @@ def convert(source_path, books):
             chapter, verse = n, 1
         elif verse + 1 < n <= verse + 5 and result and split_embedded(result, verse, n):
             verse = n                         # versículos que estavam colados no parágrafo anterior
+        elif following == verse + 2 or (following is not None and following == n + 1 and abs(n - verse) <= 9):
+            # Número errado na própria fonte (ex.: Marcos 4.34 impresso como "31"): a sequência
+            # em volta mostra qual é o versículo certo.
+            WARNINGS.append(f"{books[book_index][0]} {chapter}:{verse + 1} estava numerado {n} na fonte; corrigido")
+            verse += 1
+        elif boundary and following == 2:
+            WARNINGS.append(f"{books[book_index][0]}: capítulo {chapter + 1} começava com o número {n} na fonte; corrigido")
+            chapter, verse = chapter + 1, 1
         else:
             print("parágrafos ignorados antes do erro:")
             for t in skipped[i]:
@@ -132,6 +140,9 @@ def convert(source_path, books):
             )
         result.append((book_index, chapter, verse, content))
     return result
+
+
+WARNINGS = []
 
 
 def split_embedded(result, verse, n):
@@ -172,6 +183,9 @@ def main():
     verses = convert(source, books)
     problems = validate(verses, books)
     print(f"versículos: {len(verses)}")
+    print(f"correções de numeração da fonte: {len(WARNINGS)}")
+    for w in WARNINGS:
+        print("  corrigido:", w)
     for p in problems:
         print("PROBLEMA:", p)
 
