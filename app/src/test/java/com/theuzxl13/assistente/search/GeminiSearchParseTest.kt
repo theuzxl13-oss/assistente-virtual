@@ -48,5 +48,8 @@ class GeminiSearchParseTest {
         assertEquals("gemini-3.8-flash", GeminiSearch.chooseModel(json, exclude = "gemini-flash-latest"))
         val withAlias = json.replace("\"models\":[", "\"models\":[{\"name\":\"models/gemini-flash-latest\",\"supportedGenerationMethods\":[\"generateContent\"]},")
         assertEquals("gemini-flash-latest", GeminiSearch.chooseModel(withAlias, exclude = "gemini-2.5-flash"))
+        // Modelo leve (modo sem pesquisa e explicações): prefere as variantes "lite".
+        assertEquals("gemini-3.1-flash-lite", GeminiSearch.chooseModel(json, exclude = "gemini-flash-lite-latest", preferLite = true))
+        assertEquals("gemini-flash-lite-latest", GeminiSearch.chooseModel(json, exclude = "x", preferLite = true))
     }
 }

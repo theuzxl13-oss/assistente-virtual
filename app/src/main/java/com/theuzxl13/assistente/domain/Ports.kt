@@ -103,6 +103,7 @@ data class WebResult(val title: String, val snippet: String, val url: String, va
 
 enum class SearchProvider(val spokenName: String) {
     GEMINI("Pesquisa Google"),
+    GEMINI_NO_SEARCH("Gemini, sem pesquisa"),
     WIKIPEDIA("Wikipédia"),
     NEWS("Google Notícias")
 }

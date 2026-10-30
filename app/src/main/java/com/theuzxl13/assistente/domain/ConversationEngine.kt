@@ -777,6 +777,8 @@ class ConversationEngine(
                 ?: " Essa resposta não veio de uma fonte que eu tenha conferido."
             answer.summary + source
         }
+        SearchProvider.GEMINI_NO_SEARCH ->
+            answer.summary + " Essa resposta é do Gemini, sem pesquisa na internet; pode não estar atualizada."
         SearchProvider.WIKIPEDIA -> {
             val title = answer.results.firstOrNull()?.title
             "Encontrei na Wikipédia" + (title?.let { ", em $it" } ?: "") + ". " + answer.summary
@@ -788,15 +790,11 @@ class ConversationEngine(
         }
     }
 
+    /** Pergunta curta: as opções (detalhes, próximo resultado, navegador) continuam valendo se ela pedir. */
     private fun followUpQuestion(session: SearchSession): String {
-        val options = mutableListOf<String>()
-        if (!session.detailsRead && session.answer.details.isNotBlank()) options += "mais detalhes"
-        if (session.index + 1 < session.answer.results.size) {
-            options += if (session.answer.provider == SearchProvider.NEWS) "a próxima notícia" else "o próximo resultado"
-        }
-        if (session.current?.url?.isNotBlank() == true) options += "abrir no navegador"
-        if (options.isEmpty()) return "Quer perguntar mais alguma coisa?"
-        return "Quer ouvir ${PtBr.joinSpoken(options).replace(" e abrir", ", ou abrir").replace(" e ", " ou ")}?"
+        val hasMore = (!session.detailsRead && session.answer.details.isNotBlank()) ||
+            session.index + 1 < session.answer.results.size
+        return if (hasMore) "Quer saber mais?" else "Quer perguntar mais alguma coisa?"
     }
 
     private suspend fun readSearchDetails(session: SearchSession): Next {
@@ -809,6 +807,8 @@ class ConversationEngine(
                 if (rest.isNotBlank()) return readChunked(details)
                 say(chunk)
             }
+            // "Quer saber mais?" → "sim": sem detalhes, segue para o próximo resultado.
+            session.index + 1 < session.answer.results.size -> return readNextResult(session)
             snippet.isNotBlank() -> say(snippet)
             else -> say("Não tenho mais detalhes desse resultado. Posso abrir a página no navegador, para o TalkBack ler.")
         }
@@ -1041,7 +1041,7 @@ class ConversationEngine(
             SearchError.TIMEOUT -> "A pesquisa demorou demais."
             SearchError.UNAUTHORIZED -> "O serviço de pesquisa recusou a chave de acesso do aplicativo. A chave precisa ser conferida."
             SearchError.MODEL_UNAVAILABLE -> "O serviço de pesquisa configurado não está mais disponível para esta chave. O aplicativo precisa ser atualizado."
-            SearchError.RATE_LIMITED -> "O limite de pesquisas do serviço foi atingido. Daqui a pouco deve voltar a funcionar."
+            SearchError.RATE_LIMITED -> "O serviço de pesquisa recusou o pedido por limite de uso da conta do aplicativo."
             SearchError.SERVER -> "O serviço de pesquisa está com problemas agora."
             SearchError.BAD_REQUEST -> "O serviço de pesquisa não aceitou o pedido."
             SearchError.EMPTY -> "Não encontrei resultados para essa pergunta."

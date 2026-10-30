@@ -155,8 +155,8 @@ class SearchClientsTest {
         val answer = result.answer
 
         assertEquals(SearchProvider.WIKIPEDIA, answer.provider)
-        assertEquals("Moisés é uma figura central nas religiões abraâmicas. Segundo a Bíblia, libertou os hebreus do Egito.", answer.summary)
-        assertEquals("Recebeu as Tábuas da Lei no Monte Sinai.", answer.details)
+        assertEquals("Moisés é uma figura central nas religiões abraâmicas.", answer.summary)
+        assertEquals("Segundo a Bíblia, libertou os hebreus do Egito. Recebeu as Tábuas da Lei no Monte Sinai.", answer.details)
         assertEquals(listOf("Moisés", "Moisés (Michelangelo)"), answer.results.map { it.title })
         assertEquals("escultura de Moisés", answer.results[1].snippet)
         assertTrue(answer.results[0].url.endsWith("/wiki/Mois%C3%A9s"))
@@ -233,6 +233,73 @@ class SearchClientsTest {
         val result = search.ask("Bela, pesquise quem foi Moisés", emptyList()) as SearchResult.Success
         assertEquals(SearchProvider.WIKIPEDIA, result.answer.provider)
         assertTrue(server.requestCount >= 3)
+    }
+
+    @Test
+    fun `pesquisa google recusada - gemini responde sem pesquisa e a recusa fica guardada`() = runTest {
+        val quota429 = """{"error":{"code":429,"message":"You exceeded your current quota","status":"RESOURCE_EXHAUSTED"}}"""
+        val noSearchAnswer = """{"candidates":[{"content":{"parts":[{"text":"Moisés foi o profeta que guiou os hebreus."}]}}]}"""
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                val path = request.path.orEmpty()
+                val body = request.body.readUtf8()
+                return when {
+                    path.contains("gemini-flash-latest:generateContent") && body.contains("google_search") ->
+                        MockResponse().setResponseCode(429).setBody(quota429)
+                    path.contains("gemini-flash-lite-latest:generateContent") && !body.contains("google_search") ->
+                        MockResponse().setBody(noSearchAnswer)
+                    else -> MockResponse().setResponseCode(500)
+                }
+            }
+        }
+        val g = gemini()
+        val search = WebSearch(g, WikipediaSearch(http, base(), log), NewsSearch(http, base(), log), log)
+
+        val first = search.ask("quem foi Moisés", emptyList()) as SearchResult.Success
+        assertEquals(SearchProvider.GEMINI_NO_SEARCH, first.answer.provider)
+        assertEquals("Moisés foi o profeta que guiou os hebreus.", first.answer.summary)
+        val requestsAfterFirst = server.requestCount
+
+        // Na segunda pergunta não perde tempo com a pesquisa Google recusada: vai direto ao modo sem pesquisa.
+        search.ask("quem foi Davi", emptyList())
+        assertEquals(requestsAfterFirst + 1, server.requestCount)
+    }
+
+    @Test
+    fun `limite de resposta e enviado ao gemini`() = runTest {
+        server.enqueue(MockResponse().setBody(okAnswer))
+        gemini().ask("x", emptyList())
+        assertTrue(server.takeRequest().body.readUtf8().contains("\"maxOutputTokens\":1024"))
+    }
+
+    @Test
+    fun `noticias - gemini primeiro e manchetes se ele falhar`() = runTest {
+        server.dispatcher = object : okhttp3.mockwebserver.Dispatcher() {
+            override fun dispatch(request: okhttp3.mockwebserver.RecordedRequest): MockResponse {
+                val path = request.path.orEmpty()
+                return when {
+                    path.contains(":generateContent") -> MockResponse().setResponseCode(429).setBody("{}")
+                    path.startsWith("/rss") -> MockResponse().setBody(rss)
+                    else -> MockResponse().setResponseCode(500)
+                }
+            }
+        }
+        val search = WebSearch(gemini(), WikipediaSearch(http, base(), log), NewsSearch(http, base(), log), log)
+        val result = search.ask("notícias de hoje", emptyList()) as SearchResult.Success
+        assertEquals(SearchProvider.NEWS, result.answer.provider)
+        // O modo sem pesquisa não é usado para notícias (não sabe as de hoje).
+        assertFalse(server.takeRequest().path!!.contains("lite"))
+    }
+
+    @Test
+    fun `sem conexao nao tenta as outras fontes`() = runTest {
+        val port = server.port
+        server.shutdown()
+        val offlineHttp = "http://127.0.0.1:$port"
+        val search = WebSearch(
+            GeminiSearch("k", http, offlineHttp, log), WikipediaSearch(http, offlineHttp, log), NewsSearch(http, offlineHttp, log), log
+        )
+        assertEquals(SearchResult.Failure(SearchError.NO_CONNECTION), search.ask("quem foi Moisés", emptyList()))
     }
 
     @Test

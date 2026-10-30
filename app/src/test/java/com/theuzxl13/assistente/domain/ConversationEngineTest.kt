@@ -353,8 +353,29 @@ class ConversationEngineTest {
         engine(FakeInput("Bela, pesquise quem foi Moisés", "mais detalhes", "próximo resultado")).runSession()
         assertEquals("Vou pesquisar. Só um instante.", speech.spoken[0])
         assertEquals("Encontrei na Wikipédia, em Moisés. Moisés é uma figura central nas religiões abraâmicas.", speech.spoken[1])
-        assertEquals("Quer ouvir mais detalhes, o próximo resultado, ou abrir no navegador?", speech.spoken[2])
+        assertEquals("Quer saber mais?", speech.spoken[2])
         assertEquals("Recebeu as Tábuas da Lei no Monte Sinai.", speech.spoken[3])
+        assertTrue(speech.spoken.contains("Resultado 2: Moisés (Michelangelo), de Wikipédia. escultura de Moisés"))
+    }
+
+    @Test
+    fun `resposta do gemini sem pesquisa avisa que pode estar desatualizada`() = runTest {
+        search.result = SearchResult.Success(
+            Answer("Uma receita simples leva cenoura, ovos, óleo, açúcar e farinha.", "Bata no liquidificador. Asse por 40 minutos.", emptyList(), provider = SearchProvider.GEMINI_NO_SEARCH)
+        )
+        engine(FakeInput("pesquise uma receita de bolo", "sim")).runSession()
+        assertEquals(
+            "Uma receita simples leva cenoura, ovos, óleo, açúcar e farinha. Essa resposta é do Gemini, sem pesquisa na internet; pode não estar atualizada.",
+            speech.spoken[1]
+        )
+        assertEquals("Quer saber mais?", speech.spoken[2])
+        assertEquals("Bata no liquidificador. Asse por 40 minutos.", speech.spoken[3])
+    }
+
+    @Test
+    fun `sim sem detalhes passa para o proximo resultado`() = runTest {
+        search.result = SearchResult.Success(wikiAnswer.copy(details = ""))
+        engine(FakeInput("pesquise quem foi Moisés", "sim")).runSession()
         assertTrue(speech.spoken.contains("Resultado 2: Moisés (Michelangelo), de Wikipédia. escultura de Moisés"))
     }
 

@@ -184,10 +184,17 @@ consegue abrir a busca, e os resultados ficam na tela sem serem lidos.
 
 A pesquisa combina três fontes reais (`search/WebSearch.kt`):
 
-| Pedido | 1ª fonte | Se falhar |
-|---|---|---|
-| notícias ("notícias de hoje", "notícias sobre…") | Google Notícias (RSS, sem chave): manchetes reais, uma por vez | Gemini |
-| qualquer outra pergunta | Gemini + Pesquisa Google: resumo com os sites usados | Wikipédia (sem chave): resumo do artigo + lista de artigos |
+| Pedido | 1ª tentativa | 2ª | 3ª |
+|---|---|---|---|
+| qualquer pergunta | Gemini + Pesquisa Google (resumo com sites) | Gemini **sem** pesquisa (`gemini-flash-lite-latest`; avisa que pode não estar atualizado) | Wikipédia |
+| notícias | Gemini + Pesquisa Google | Google Notícias (RSS, manchetes reais) | — |
+
+- Se a Pesquisa Google for recusada (cota, plano ou chave), o app não tenta de novo por 30 minutos
+  e vai direto ao Gemini sem pesquisa, para não fazer a usuária esperar a recusa a cada pergunta.
+- Sem conexão ou DNS, não tenta as outras fontes: fala o erro na hora.
+- Respostas limitadas a 1024 tokens; o prompt proíbe instruções físicas (atravessar a rua, obstáculos).
+- Depois da resposta, a Bela pergunta só "Quer saber mais?"; "sim" lê os detalhes ou o próximo
+  resultado. "Próximo resultado" e "abra no navegador" continuam funcionando quando pedidos.
 
 - A Bela sempre diz de onde veio a informação: "a informação é de…", "encontrei na Wikipédia…",
   "notícias do Google Notícias". Se o Gemini responder sem fontes, ela avisa que a resposta não

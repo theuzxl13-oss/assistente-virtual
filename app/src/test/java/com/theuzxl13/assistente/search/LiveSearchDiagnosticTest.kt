@@ -27,12 +27,13 @@ class LiveSearchDiagnosticTest {
     @Test
     fun diagnostico() {
         assumeTrue(System.getenv("LIVE_SEARCH_DIAGNOSTIC") == "1")
-        line("Chave do Gemini presente no build: ${key.isNotBlank()} (tamanho ${key.length})")
+        line("Chave do Gemini presente no build: ${key.isNotBlank()}")
 
         if (key.isNotBlank()) {
             gemini("gemini-2.5-flash com google_search (versão antiga do app)", "gemini-2.5-flash", grounding = true)
             gemini("gemini-flash-latest com google_search", "gemini-flash-latest", grounding = true)
             gemini("gemini-3.8-flash com google_search", "gemini-3.8-flash", grounding = true)
+            gemini("gemini-flash-lite-latest sem google_search (modo sem pesquisa)", "gemini-flash-lite-latest", grounding = false)
             listModels()
         }
         get("Wikipédia (busca)", "https://pt.wikipedia.org/w/rest.php/v1/search/page?q=Mois%C3%A9s&limit=1")

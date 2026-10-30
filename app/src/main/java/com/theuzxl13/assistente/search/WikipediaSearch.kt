@@ -84,7 +84,7 @@ class WikipediaSearch(
         }
 
         internal fun buildAnswer(extract: String, pages: List<Page>): Answer {
-            val (summary, details) = TextCleanup.splitSentences(extract, 2)
+            val (summary, details) = TextCleanup.splitSentences(extract, 1)
             val first = pages.first().result
             return Answer(
                 summary = summary,

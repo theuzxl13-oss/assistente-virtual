@@ -7,13 +7,13 @@ import com.theuzxl13.assistente.domain.SearchResult
 import com.theuzxl13.assistente.domain.Turn
 
 /**
- * Pesquisa que a Bela usa, combinando serviços reais:
- * - notícias: manchetes do Google Notícias (lista para "próxima notícia"); se falhar, Gemini;
- * - o resto: Gemini com Pesquisa Google (resumo com fontes); se falhar, Wikipédia.
+ * Pesquisa que a Bela usa. O Gemini responde primeiro em todas as perguntas:
+ * - qualquer pergunta: Gemini com Pesquisa Google → Gemini sem pesquisa (avisa que pode estar
+ *   desatualizado) → Wikipédia;
+ * - notícias: Gemini com Pesquisa Google → manchetes do Google Notícias (o Gemini sem pesquisa
+ *   não sabe as notícias de hoje, então não é usado).
  *
- * Wikipédia e Google Notícias não precisam de chave, então a pesquisa continua funcionando mesmo
- * se o Gemini estiver sem chave, sem cota ou fora do ar. Quando tudo falha, devolve o erro mais
- * útil para a usuária (o do serviço principal, a não ser que ele só não tenha achado nada).
+ * Sem rede (sem conexão / DNS) não adianta tentar as outras fontes: devolve o erro na hora.
  */
 class WebSearch(
     private val gemini: GeminiSearch,
@@ -26,12 +26,13 @@ class WebSearch(
         val query = SearchQuery.from(question)
         val attempts = if (query.isNews) {
             listOf<suspend () -> SearchResult>(
-                { news.search(query.newsTopic) },
-                { gemini.ask(query.question, history) }
+                { gemini.ask(query.question, history) },
+                { news.search(query.newsTopic) }
             )
         } else {
             listOf<suspend () -> SearchResult>(
                 { gemini.ask(query.question, history) },
+                { gemini.askWithoutSearch(query.question, history) },
                 { wikipedia.search(query.topic) }
             )
         }
@@ -41,6 +42,7 @@ class WebSearch(
             val result = attempt()
             if (result is SearchResult.Success) return result
             failures += result
+            if (result is SearchResult.Failure && result.error in NO_NETWORK) break
         }
         log.warn("pesquisa", "todas as fontes falharam: ${failures.joinToString { describe(it) }}")
         return mostUseful(failures)
@@ -53,6 +55,8 @@ class WebSearch(
     }
 
     companion object {
+        private val NO_NETWORK = setOf(SearchError.NO_CONNECTION, SearchError.DNS)
+
         /** Erro de rede em todas as fontes = problema de conexão; senão, o primeiro erro informativo. */
         internal fun mostUseful(failures: List<SearchResult>): SearchResult {
             val errors = failures.filterIsInstance<SearchResult.Failure>().map { it.error }
