@@ -58,7 +58,8 @@ object IntentParser {
             RESUME_MEDIA.matches(s) -> BelaIntent.ResumeMedia
             NEXT_MEDIA.matches(s) -> BelaIntent.NextMedia
 
-            else -> parseEmergency(s)
+            else -> parseMessage(raw, s)
+                ?: parseEmergency(s)
                 ?: parseCall(s)
                 ?: parseBible(raw, s)
                 ?: parseMedia(s)
@@ -95,6 +96,20 @@ object IntentParser {
             else -> return null
         }
         return BelaIntent.Choice(index)
+    }
+
+    /** "Manda mensagem pro João dizendo que estou chegando" → nome "joao", texto "que estou chegando". */
+    private fun parseMessage(raw: String, s: String): BelaIntent? {
+        val match = MESSAGE.matchEntire(s) ?: WRITE_TO.matchEntire(s) ?: return null
+        val name = match.groupValues[1]
+            .replace(Regex("^(?:(?:o|a|os|as)\\s+)+"), "")
+            .replace(Regex("\\s+(?:no|pelo) (?:whatsapp|zap|whats)$"), "")
+            .trim()
+        // O texto da mensagem sai do original, para manter acentos e maiúsculas.
+        val text = MESSAGE_TEXT_RAW.find(stripWakeWordFromRaw(raw))?.let { raw2 ->
+            stripWakeWordFromRaw(raw).substring(raw2.range.last + 1).trim().trimEnd('.').ifBlank { null }
+        }
+        return BelaIntent.SendMessage(name, text)
     }
 
     private fun parseEmergency(s: String): BelaIntent? {
@@ -172,7 +187,7 @@ object IntentParser {
         "(?:tchau|obrigad[oa]|muito obrigad[oa]|brigad[oa]|valeu|ate logo|ate mais|ate depois|so isso|era so isso|e so isso)"
     )
     private val YES = Regex(
-        "(?:sim|pode|pode sim|isso|isso mesmo|isso ai|claro|com certeza|quero|quero sim|confirmo|confirma|correto|certo|exato|ok|okay|beleza|pode ligar|pode ser|esse|essa|esse mesmo|essa mesma|esse ai|essa ai|aham|uhum|positivo|manda|vai)"
+        "(?:sim|pode|pode sim|isso|isso mesmo|isso ai|claro|com certeza|quero|quero sim|confirmo|confirma|correto|certo|exato|ok|okay|beleza|pode ligar|pode enviar|pode mandar|envia|envie|enviar|pode ser|esse|essa|esse mesmo|essa mesma|esse ai|essa ai|aham|uhum|positivo|manda|vai)"
     )
     private val NO = Regex(
         "(?:nao|nao quero|nao obrigad[oa]|negativo|errado|nao e esse|nao e essa|nao e|nenhum|nenhuma|nenhum deles|nao e nenhum)"
@@ -245,6 +260,16 @@ object IntentParser {
     private val NEXT_MEDIA = Regex(
         "$POLITE(?:proxim[oa](?: (?:musica|video|louvor|hino))?|pul(?:a|e|ar)|pass(?:a|e|ar)|avanc(?:a|e|ar))(?: (?:essa|esta|a|o|esse|este) (?:musica|video|louvor|hino))?"
     )
+
+    private const val MESSAGE_WORD = "(?:uma |um )?(?:mensagem|mensage|msg|recado|zap|zapzap|zap zap|whatsapp|whats|uats)"
+    private val MESSAGE = Regex(
+        "^$POLITE(?:mand(?:a|e|ar)|envi(?:a|e|ar)|man(?:da|de)|mandar)\\s+$MESSAGE_WORD(?:\\s+(?:no|pelo) (?:whatsapp|zap|whats))?" +
+            "(?:\\s+(?:para|pra|pro|ao|a|o|pros|pras)\\s+(.+?))?(?:\\s+(?:dizendo|falando|escrevendo|com a mensagem|que diz)\\s+.+)?$"
+    )
+    private val WRITE_TO = Regex(
+        "^$POLITE(?:escrev(?:a|e|er)|mand(?:a|e|ar) (?:um )?zap)\\s+(?:para|pra|pro)\\s+(.+?)(?:\\s+(?:dizendo|falando|escrevendo|com a mensagem|que diz)\\s+.+)?$"
+    )
+    private val MESSAGE_TEXT_RAW = Regex("\\b(?:dizendo|falando|escrevendo|com a mensagem|que diz)\\b\\s*:?", RegexOption.IGNORE_CASE)
 
     private val EMERGENCY = Regex(
         "^$POLITE(?:(?:lig(?:a|ue|ar)|cham(?:a|e|ar)|telefon(?:a|e|ar)|disc(?:a|ar)|disque)\\s+(?:(?:para|pra|pro|a|o|os|as)\\s+)*)?(?:(?:o|a|os|as)\\s+)?(samu|ambulancia|policia|bombeiros?|emergencia|190|192|193)\\b"

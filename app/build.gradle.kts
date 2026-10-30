@@ -23,8 +23,8 @@ android {
         applicationId = "com.theuzxl13.assistente"
         minSdk = 26
         targetSdk = 35
-        versionCode = 6
-        versionName = "2.3"
+        versionCode = 7
+        versionName = "2.4"
 
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
         buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeApiKey\"")

@@ -121,6 +121,15 @@ class ConversationEngineTest {
         override suspend fun explain(reference: String, text: String): SearchResult { asked += "$reference|$text"; return result }
     }
 
+    private class FakeMessaging(var installed: Boolean = true) : MessagingPort {
+        val opened = mutableListOf<Pair<String, String>>()
+        override fun isWhatsAppInstalled() = installed
+        override fun openWhatsApp(phoneDigits: String, text: String): MessageOpenResult {
+            opened += phoneDigits to text
+            return MessageOpenResult.OPENED
+        }
+    }
+
     private class FakePrefs : PreferencesPort {
         override var speechRate = 1f
         override var onboardingDone = false
@@ -144,13 +153,15 @@ class ConversationEngineTest {
         listOf(InstalledApp("WhatsApp", "com.whatsapp"), InstalledApp("YouTube", "com.google.android.youtube"))
     )
 
+    private val messaging = FakeMessaging()
+
     private val explainer = FakeExplainer(
         SearchResult.Success(Answer("Deus cuida de nós; podemos entregar a Ele nossas preocupações.", "Pedro escrevia a cristãos perseguidos.", emptyList()))
     )
 
     private fun engine(input: FakeInput) = ConversationEngine(
         speech, input, NoSounds, permissions, contacts, phone, media, search, apps, device, FakePrefs(),
-        bible = FakeBible(), explainer = explainer,
+        bible = FakeBible(), explainer = explainer, messaging = messaging,
         now = { ZonedDateTime.of(2026, 10, 20, 14, 5, 0, 0, ZoneId.of("America/Sao_Paulo")) },
         wait = {}
     ).also { it.onStateChanged = { s -> states += s } }
@@ -494,6 +505,53 @@ class ConversationEngineTest {
         explainer.result = SearchResult.Failure(SearchError.RATE_LIMITED)
         engine(FakeInput("leia 1 Pedro 5 7", "o que significa")).runSession()
         assertTrue(speech.spoken.contains("O limite de uso do serviço de explicações foi atingido."))
+    }
+
+    @Test
+    fun `mensagem no whatsapp - contato, texto, confirmacao e abre a conversa`() = runTest {
+        engine(FakeInput("mandar mensagem para a Ana", "Estou chegando", "pode enviar")).runSession()
+        assertEquals("O que você quer mandar para Ana Paula?", speech.spoken[0])
+        assertEquals("Você quer enviar: Estou chegando. Para Ana Paula. Pode enviar? Se quiser mudar a mensagem, diga corrigir.", speech.spoken[1])
+        assertEquals(listOf("5511966660001" to "Estou chegando"), messaging.opened)
+        assertTrue(speech.spoken.last().contains("toque no botão Enviar"))
+        assertFalse(speech.spoken.any { it.contains("enviada") })   // nunca afirma que enviou
+    }
+
+    @Test
+    fun `mensagem ditada pode ser qualquer frase, ate obrigada`() = runTest {
+        engine(FakeInput("manda um zap pra Ana", "obrigada", "sim")).runSession()
+        assertEquals(listOf("5511966660001" to "obrigada"), messaging.opened)
+    }
+
+    @Test
+    fun `mensagem junto com o pedido e correcao`() = runTest {
+        engine(FakeInput("mande mensagem pra Ana dizendo vou atrasar", "corrigir", "Vou chegar às oito", "pode")).runSession()
+        assertTrue(speech.spoken[0].startsWith("Você quer enviar: vou atrasar."))
+        assertEquals("Tudo bem. Qual é a mensagem para Ana Paula?", speech.spoken[1])
+        assertEquals(listOf("5511966660001" to "Vou chegar às oito"), messaging.opened)
+    }
+
+    @Test
+    fun `mensagem - nomes repetidos e cancelar no ditado`() = runTest {
+        engine(FakeInput("mandar mensagem para o Matheus", "o segundo", "cancelar")).runSession()
+        assertTrue(speech.spoken[0].endsWith("Para qual você quer mandar?"))
+        assertEquals("O que você quer mandar para Matheus Silva?", speech.spoken[1])
+        assertEquals("Tudo bem, cancelei.", speech.spoken.last())
+        assertTrue(messaging.opened.isEmpty())
+    }
+
+    @Test
+    fun `mensagem - nao manda se ela disser nao`() = runTest {
+        engine(FakeInput("mandar mensagem para a Ana dizendo oi", "não")).runSession()
+        assertTrue(messaging.opened.isEmpty())
+        assertEquals("Tudo bem, não vou mandar.", speech.spoken.last())
+    }
+
+    @Test
+    fun `mensagem - sem whatsapp instalado avisa`() = runTest {
+        messaging.installed = false
+        engine(FakeInput("mandar mensagem para a Ana")).runSession()
+        assertTrue(speech.spoken.single().startsWith("O WhatsApp não está instalado"))
     }
 
     @Test

@@ -81,6 +81,10 @@ depois ligado**.
 - [ ] "Explica pra mim": avisa que é explicação por inteligência artificial. Sem internet: diz que precisa de internet e a leitura continua.
 - [ ] "Salmo 119": lê de 10 em 10 versículos e pergunta se continua; "não" para.
 - [ ] Modo avião: "leia João 3,16" funciona.
+- [ ] "Mandar mensagem para [contato]" → "o que você quer mandar?" → fala a mensagem → confirma → abre o WhatsApp na conversa certa com o texto; o botão Enviar é encontrado com o TalkBack.
+- [ ] "Mande mensagem pra [contato] dizendo [texto]" já com o texto; "corrigir" pede a mensagem de novo; "não" cancela.
+- [ ] Mensagem ditada "obrigada" ou "repete amanhã" vira o texto (não é tratada como comando).
+- [ ] Contato salvo sem DDD: a Bela avisa e não abre conversa errada.
 - [ ] `adb logcat -s BelaPesquisa` mostra a etapa e o código do erro, sem a pergunta nem a chave.
 - [ ] Pergunta de acompanhamento ("e sem glúten?") usa o contexto.
 - [ ] Sem internet: pesquisa e música avisam; hora, ligação e apps funcionam.

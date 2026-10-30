@@ -14,6 +14,7 @@ botões pequenos.
 | "Ligue para o Matheus" | procura na agenda, confirma ("Encontrei Matheus Marcelino. Quer que eu ligue?") ou lê as opções se houver nomes repetidos, e liga |
 | "Quem está me ligando?" · "Atender" · "Recusar" · "Desligue" | diz o nome (ou "número que não está na agenda, terminado em…"), atende, recusa ou desliga e confirma |
 | "Ligue para o SAMU / polícia / bombeiros" | confirma e liga para 192, 190 ou 193 |
+| "Mandar mensagem para a Maria" (ou "... dizendo estou chegando") | pergunta a mensagem, lê de volta para confirmar ("diga corrigir para mudar") e abre a conversa no WhatsApp com o texto pronto; **o toque final em Enviar é dela** (sem serviço de acessibilidade, nenhum app consegue apertar o botão do WhatsApp), e a Bela diz onde fica o botão |
 | "Quero ouvir Gabriela Rocha" · "Toque um louvor" | busca no YouTube, lê três títulos, você escolhe ("o segundo") e ele abre tocando |
 | "Pause" · "Continue" · "Pare a música" · "Quero ouvir outro" | controla o player pelas teclas de mídia do Android |
 | "Pesquise uma receita de bolo de cenoura" · qualquer pergunta | pesquisa no Google, lê um resumo, diz a fonte e oferece mais detalhes |

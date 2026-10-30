@@ -35,6 +35,9 @@
         </intent>
         <package android:name="com.google.android.youtube" />
         <package android:name="com.google.android.apps.youtube.music" />
+        <!-- Mensagens: só para saber se o WhatsApp está instalado e abrir a conversa. -->
+        <package android:name="com.whatsapp" />
+        <package android:name="com.whatsapp.w4b" />
     </queries>
 
     <application

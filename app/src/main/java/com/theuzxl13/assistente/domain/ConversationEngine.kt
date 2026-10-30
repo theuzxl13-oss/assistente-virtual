@@ -38,6 +38,7 @@ class ConversationEngine(
     private val prefs: PreferencesPort,
     private val bible: BiblePort = NoBible,
     private val explainer: BibleExplainerPort = NoBibleExplainer,
+    private val messaging: MessagingPort = NoMessaging,
     private val now: () -> ZonedDateTime = { ZonedDateTime.now() },
     private val wait: suspend (Long) -> Unit = { delay(it) }
 ) {
@@ -63,6 +64,10 @@ class ConversationEngine(
         class ConfirmCall(val contact: Contact, question: String) : Pending(question)
         class ChooseContact(val options: List<Contact>, question: String) : Pending(question)
         class AskCallName(question: String) : Pending(question)
+        class ChooseMessageContact(val options: List<Contact>, val text: String?, question: String) : Pending(question)
+        class AskMessageContact(val text: String?, question: String) : Pending(question)
+        class AskMessageText(val contact: Contact, question: String) : Pending(question)
+        class ConfirmMessage(val contact: Contact, val text: String, question: String) : Pending(question)
         class ChooseMedia(val list: MediaList, question: String) : Pending(question)
         class AskMediaQuery(question: String) : Pending(question)
         class ChooseApp(val options: List<InstalledApp>, question: String) : Pending(question)
@@ -156,6 +161,23 @@ class ConversationEngine(
         val text = alternatives.firstOrNull().orEmpty()
         val waiting = pending
 
+        // Ditado da mensagem: tudo o que ela falar é a mensagem ("obrigada", "repete amanhã"...),
+        // menos cancelar e parar.
+        if (waiting is Pending.AskMessageText) {
+            val control = IntentParser.parse(text)
+            if (control == BelaIntent.Cancel || control == BelaIntent.Stop) return dispatch(control)
+            val message = IntentParser.stripWakeWordFromRaw(text).trim()
+            if (message.isBlank()) return askAgain(waiting, "Não ouvi a mensagem.")
+            pending = null
+            return confirmMessage(waiting.contact, message)
+        }
+        if (waiting is Pending.ChooseMessageContact) {
+            matchOption(alternatives, waiting.options.map { it.name })?.let { index ->
+                pending = null
+                return messageContactChosen(waiting.options[index], waiting.text)
+            }
+        }
+
         // Respostas pelo nome numa lista: "Matheus Marcelino", "o WhatsApp".
         if (waiting is Pending.ChooseContact) {
             matchOption(alternatives, waiting.options.map { it.name })?.let { index ->
@@ -171,7 +193,7 @@ class ConversationEngine(
         }
 
         val expectingChoice = waiting is Pending.ChooseContact || waiting is Pending.ChooseMedia ||
-            waiting is Pending.ChooseApp
+            waiting is Pending.ChooseApp || waiting is Pending.ChooseMessageContact
         var intent = IntentParser.parse(text, expectingChoice)
         if (intent is BelaIntent.Ask) {
             // O reconhecedor às vezes acerta o comando só na 2ª ou 3ª alternativa.
@@ -216,6 +238,39 @@ class ConversationEngine(
                 BelaIntent.No -> { pending = null; say("Tudo bem, não vou ligar."); Next.END }
                 is BelaIntent.Call -> { pending = null; startCall(intent.name) }
                 is BelaIntent.Ask -> { pending = null; startCall(IntentParser.clean(text)) }
+                else -> { pending = null; dispatch(intent) }
+            }
+
+            is Pending.ChooseMessageContact -> when (intent) {
+                is BelaIntent.Choice -> pick(waiting.options, intent.index, waiting)?.let {
+                    pending = null
+                    messageContactChosen(it, waiting.text)
+                } ?: Next.LISTEN
+                BelaIntent.No -> { pending = null; say("Tudo bem, não vou mandar mensagem."); Next.END }
+                is BelaIntent.Ask -> askAgain(waiting, "Não entendi para quem.")
+                else -> { pending = null; dispatch(intent) }
+            }
+
+            is Pending.AskMessageContact -> when (intent) {
+                BelaIntent.No -> { pending = null; say("Tudo bem, não vou mandar mensagem."); Next.END }
+                is BelaIntent.SendMessage -> { pending = null; startMessage(intent.name, intent.text ?: waiting.text) }
+                is BelaIntent.Ask, is BelaIntent.Call -> {
+                    pending = null
+                    startMessage((intent as? BelaIntent.Call)?.name ?: IntentParser.clean(text), waiting.text)
+                }
+                else -> { pending = null; dispatch(intent) }
+            }
+
+            is Pending.AskMessageText -> Next.LISTEN // tratado em handle(): tudo vira o texto da mensagem
+
+            is Pending.ConfirmMessage -> when {
+                intent == BelaIntent.Yes -> { pending = null; sendMessage(waiting.contact, waiting.text) }
+                intent == BelaIntent.No -> { pending = null; say("Tudo bem, não vou mandar."); Next.END }
+                CORRECTION.containsMatchIn(IntentParser.clean(text)) -> {
+                    pending = null
+                    ask(Pending.AskMessageText(waiting.contact, "Tudo bem. Qual é a mensagem para ${waiting.contact.name}?"))
+                }
+                intent is BelaIntent.Ask -> askAgain(waiting, "Não entendi.")
                 else -> { pending = null; dispatch(intent) }
             }
 
@@ -360,6 +415,7 @@ class ConversationEngine(
         BelaIntent.DeclineCall -> declineCall()
         BelaIntent.HangUp -> hangUp()
         BelaIntent.WhoIsCalling -> whoIsCalling()
+        is BelaIntent.SendMessage -> startMessage(intent.name, intent.text)
 
         is BelaIntent.PlayMedia -> playMedia(intent.query)
         BelaIntent.PauseMedia -> { media.pause(); say("Pedi para pausar."); Next.END }
@@ -615,6 +671,73 @@ class ConversationEngine(
                 ?: "É um número que não está na sua agenda, terminado em ${PtBr.spellDigits(number.filter { it.isDigit() }.takeLast(4))}."
         }
         return ask(Pending.ConfirmAnswer("$who Quer atender? Diga sim para atender, ou não para recusar."))
+    }
+
+    // ------------------------------------------------------------------ mensagens (WhatsApp)
+
+    private suspend fun startMessage(name: String, text: String?): Next {
+        if (!messaging.isWhatsAppInstalled()) {
+            say("O WhatsApp não está instalado neste celular, então não consigo mandar a mensagem.")
+            return Next.END
+        }
+        if (name.isBlank()) return ask(Pending.AskMessageContact(text, "Para quem você quer mandar a mensagem?"))
+        if (!ensurePermission(PermissionGroup.CONTACTS, "Para procurar seus contatos, preciso de permissão para acessar a agenda.")) {
+            return Next.END
+        }
+        setState(ConversationState.EXECUTANDO_ACAO)
+        var found = contacts.findByName(name)
+        if (found.isEmpty()) {
+            val simpler = name.replace(Regex("^(?:meu|minha|seu|sua|o|a|dona|senhor|senhora)\\s+"), "")
+            if (simpler != name && simpler.isNotBlank()) found = contacts.findByName(simpler)
+        }
+        // A mesma pessoa com vários números: para mensagem, fica só o celular quando houver.
+        found = found.groupBy { it.name.lowercase() }.values.flatMap { same ->
+            if (same.size > 1) same.filter { it.label?.contains("celular") == true }.ifEmpty { same } else same
+        }
+        return when {
+            found.isEmpty() -> ask(
+                Pending.AskMessageContact(text, "Não encontrei ninguém chamado $name na sua agenda. Para quem você quer mandar a mensagem?")
+            )
+            found.size == 1 -> messageContactChosen(found[0], text)
+            found.size <= MAX_SPOKEN_OPTIONS -> {
+                val list = found.mapIndexed { i, c -> "o ${PtBr.ordinal(i)} é ${describe(c, found)}" }
+                ask(
+                    Pending.ChooseMessageContact(
+                        found, text,
+                        "Encontrei ${found.size} contatos. ${PtBr.joinSpoken(list).replaceFirstChar { it.uppercase() }}. Para qual você quer mandar?"
+                    )
+                )
+            }
+            else -> ask(Pending.AskMessageContact(text, "Encontrei muitos contatos com o nome $name. Fale o nome completo da pessoa."))
+        }
+    }
+
+    private suspend fun messageContactChosen(contact: Contact, text: String?): Next {
+        if (text.isNullOrBlank()) return ask(Pending.AskMessageText(contact, "O que você quer mandar para ${contact.name}?"))
+        return confirmMessage(contact, text)
+    }
+
+    private suspend fun confirmMessage(contact: Contact, text: String): Next = ask(
+        Pending.ConfirmMessage(
+            contact, text,
+            "Você quer enviar: $text. Para ${contact.name}. Pode enviar? Se quiser mudar a mensagem, diga corrigir."
+        )
+    )
+
+    /** Abre a conversa com o texto pronto. Não diz "enviada": quem envia é o toque dela no botão Enviar. */
+    private suspend fun sendMessage(contact: Contact, text: String): Next {
+        val number = PhoneNumbers.forWhatsApp(contact.number)
+            ?: return fail("O número de ${contact.name} está sem o DDD na agenda, então não consigo abrir a conversa no WhatsApp.")
+        say(
+            "Vou abrir a conversa com ${contact.name} no WhatsApp, com a mensagem já escrita. " +
+                "Para enviar, toque no botão Enviar, no canto de baixo, à direita da tela."
+        )
+        setState(ConversationState.EXECUTANDO_ACAO)
+        return when (messaging.openWhatsApp(number, text)) {
+            MessageOpenResult.OPENED -> Next.END
+            MessageOpenResult.NOT_INSTALLED -> fail("O WhatsApp não está instalado neste celular.")
+            MessageOpenResult.FAILED -> fail("Não consegui abrir o WhatsApp.")
+        }
     }
 
     // ------------------------------------------------------------------ mídia
@@ -1019,11 +1142,15 @@ class ConversationEngine(
 
         val CAPABILITIES_TEXT =
             "Eu posso: ligar para seus contatos, atender ou recusar ligações e dizer quem está ligando; " +
+                "preparar mensagens no WhatsApp; " +
                 "tocar músicas e louvores do YouTube; pesquisar na internet e ler a resposta; dizer as horas e a data; " +
                 "abrir aplicativos; aumentar ou diminuir o volume; ler a Bíblia, como: leia João 3, 16; e ler textos que você compartilhar comigo. " +
                 "Também posso repetir, falar mais devagar ou mais rápido. O que você quer fazer?"
 
         const val BIBLE_CHUNK_VERSES = 10
+
+        /** "corrigir", "mudar a mensagem", "falar de novo" na confirmação da mensagem. */
+        private val CORRECTION = Regex("\\b(?:corrig\\w*|mud\\w*|troc\\w*|outra mensagem|falar de novo|fala de novo|escrever de novo|refazer)\\b")
 
         internal fun explainErrorMessage(error: SearchError): String = when (error) {
             SearchError.NO_CONNECTION, SearchError.DNS -> "Não consegui me conectar ao serviço de explicações."

@@ -141,6 +141,19 @@ class IntentParserTest {
     }
 
     @Test
+    fun `mensagens no whatsapp`() {
+        assertEquals(BelaIntent.SendMessage("maria", null), parse("Bela, mandar mensagem para a Maria"))
+        assertEquals(BelaIntent.SendMessage("joao", null), parse("manda um zap pro João"))
+        assertEquals(BelaIntent.SendMessage("matheus", null), parse("envia uma mensagem no WhatsApp para o Matheus"))
+        assertEquals(BelaIntent.SendMessage("ana", "Estou chegando, já já"), parse("Mande mensagem pra Ana dizendo Estou chegando, já já."))
+        assertEquals(BelaIntent.SendMessage("pedro", null), parse("escreve pro Pedro"))
+        assertEquals(BelaIntent.SendMessage("", null), parse("quero mandar uma mensagem"))
+        assertEquals(BelaIntent.Yes, parse("pode enviar"))
+        // Não confunde com outros pedidos.
+        assertTrue(parse("mandar o louvor para a Maria") !is BelaIntent.SendMessage)
+    }
+
+    @Test
     fun `numeros so viram escolha quando ha lista`() {
         assertTrue(parse("um") !is BelaIntent.Choice)
         assertEquals(BelaIntent.Empty, parse("Bela"))

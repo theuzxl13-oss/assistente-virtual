@@ -149,6 +149,24 @@ interface SearchPort {
     suspend fun ask(question: String, history: List<Turn>): SearchResult
 }
 
+// ---------------- Mensagens (WhatsApp) ----------------
+
+enum class MessageOpenResult { OPENED, NOT_INSTALLED, FAILED }
+
+/**
+ * Abre a conversa do WhatsApp com o texto já escrito. O envio em si é sempre um toque da usuária
+ * no botão Enviar: sem serviço de acessibilidade, nenhum app consegue apertar botões do WhatsApp.
+ */
+interface MessagingPort {
+    fun isWhatsAppInstalled(): Boolean
+    fun openWhatsApp(phoneDigits: String, text: String): MessageOpenResult
+}
+
+object NoMessaging : MessagingPort {
+    override fun isWhatsAppInstalled() = false
+    override fun openWhatsApp(phoneDigits: String, text: String) = MessageOpenResult.NOT_INSTALLED
+}
+
 // ---------------- Bíblia ----------------
 
 interface BiblePort {

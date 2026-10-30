@@ -36,6 +36,10 @@ sealed class BelaIntent {
     data object HangUp : BelaIntent()
     data object WhoIsCalling : BelaIntent()
 
+    // Mensagens
+    /** "Mandar mensagem para a Maria" (o texto pode vir junto: "... dizendo estou chegando"). */
+    data class SendMessage(val name: String, val text: String?) : BelaIntent()
+
     // Mídia
     data class PlayMedia(val query: String) : BelaIntent()
     data object PauseMedia : BelaIntent()

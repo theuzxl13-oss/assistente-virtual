@@ -21,6 +21,7 @@ import com.theuzxl13.assistente.domain.ConversationEngine
 import com.theuzxl13.assistente.domain.ConversationState
 import com.theuzxl13.assistente.domain.Onboarding
 import com.theuzxl13.assistente.media.YouTubeMedia
+import com.theuzxl13.assistente.messaging.AndroidMessaging
 import com.theuzxl13.assistente.search.GeminiSearch
 import com.theuzxl13.assistente.search.NewsSearch
 import com.theuzxl13.assistente.search.SearchLog
@@ -88,7 +89,8 @@ class MainActivity : AppCompatActivity() {
             device = device,
             prefs = prefs,
             bible = AssetBible(this),
-            explainer = gemini
+            explainer = gemini,
+            messaging = AndroidMessaging(this)
         )
         engine.onStateChanged = { state -> runOnUiThread { render(state) } }
         onboarding = Onboarding(speech, input, sounds, permissions, device, prefs)
