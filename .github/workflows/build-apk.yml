@@ -49,11 +49,28 @@ jobs:
           gradle testDebugUnitTest --tests '*LiveSearchDiagnosticTest' --rerun --no-daemon -q || true
           cat app/build/diagnostico-pesquisa.txt || echo "sem relatório"
 
+      # Com a assinatura fixa (secrets RELEASE_KEYSTORE_BASE64 e RELEASE_KEYSTORE_PASSWORD), gera o
+      # APK de release, que instala por cima da versão anterior. Sem eles, gera o APK de teste (debug).
       - name: Compilar APK
-        run: gradle assembleDebug --no-daemon
-
-      - name: Renomear APK
-        run: cp app/build/outputs/apk/debug/app-debug.apk Bela.apk
+        env:
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -n "$RELEASE_KEYSTORE_BASE64" ] && [ -n "$RELEASE_KEYSTORE_PASSWORD" ]; then
+            echo "$RELEASE_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/bela-release.jks"
+            {
+              echo "RELEASE_KEYSTORE_PATH=$RUNNER_TEMP/bela-release.jks"
+              echo "RELEASE_KEYSTORE_PASSWORD=$RELEASE_KEYSTORE_PASSWORD"
+            } >> local.properties
+            gradle assembleRelease --no-daemon
+            cp app/build/outputs/apk/release/app-release.apk Bela.apk
+            echo "APK de release com assinatura fixa."
+          else
+            echo "::warning::Sem assinatura fixa: gerando APK de teste (cada versão exige desinstalar a anterior)."
+            gradle assembleDebug --no-daemon
+            cp app/build/outputs/apk/debug/app-debug.apk Bela.apk
+          fi
+          rm -f "$RUNNER_TEMP/bela-release.jks"
 
       - name: Relatório dos testes
         if: failure()

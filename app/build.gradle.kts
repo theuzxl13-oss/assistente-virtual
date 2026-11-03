@@ -15,6 +15,14 @@ val localProperties = Properties().apply {
 val geminiApiKey: String = localProperties.getProperty("GEMINI_API_KEY") ?: ""
 val youtubeApiKey: String = localProperties.getProperty("YOUTUBE_API_KEY") ?: ""
 
+// Assinatura fixa de release: com ela, cada versão nova instala por cima da anterior. O arquivo e a
+// senha vêm dos secrets do GitHub (ou do local.properties); nunca ficam no repositório.
+val releaseKeystorePath: String? = localProperties.getProperty("RELEASE_KEYSTORE_PATH")
+val releaseKeystorePassword: String? = localProperties.getProperty("RELEASE_KEYSTORE_PASSWORD")
+val releaseKeyAlias: String = localProperties.getProperty("RELEASE_KEY_ALIAS") ?: "bela"
+val hasReleaseSigning = !releaseKeystorePath.isNullOrBlank() && !releaseKeystorePassword.isNullOrBlank() &&
+    rootProject.file(releaseKeystorePath!!).exists()
+
 android {
     namespace = "com.theuzxl13.assistente"
     compileSdk = 35
@@ -30,8 +38,20 @@ android {
         buildConfigField("String", "YOUTUBE_API_KEY", "\"$youtubeApiKey\"")
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = rootProject.file(releaseKeystorePath!!)
+                storePassword = releaseKeystorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeystorePassword
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
         }
