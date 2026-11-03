@@ -16,8 +16,9 @@
     <uses-permission android:name="android.permission.READ_CALL_LOG" />
 
     <!--
-      Sem nenhuma permissão de acessibilidade, sobreposição de tela, captura de tela ou leitura de
-      notificações: são as permissões que fazem apps de banco bloquearem o celular.
+      Sem sobreposição de tela, captura de tela ou leitura de notificações. O único serviço de
+      acessibilidade é o opcional "Bela, envio de mensagens" (abaixo), limitado ao WhatsApp. Atenção:
+      ativá-lo pode fazer apps de banco voltarem a bloquear o celular.
     -->
 
     <queries>
@@ -84,6 +85,20 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
             <meta-data android:name="android.service.quicksettings.ACTIVE_TILE" android:value="false" />
+        </service>
+
+        <!-- Opcional: só existe para tocar em Enviar no WhatsApp depois da confirmação por voz. -->
+        <service
+            android:name=".messaging.WhatsAppSendService"
+            android:exported="true"
+            android:label="@string/auto_send_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/whatsapp_send_service" />
         </service>
 
         <receiver

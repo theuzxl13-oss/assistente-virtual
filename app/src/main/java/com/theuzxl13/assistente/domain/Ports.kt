@@ -151,20 +151,35 @@ interface SearchPort {
 
 // ---------------- Mensagens (WhatsApp) ----------------
 
-enum class MessageOpenResult { OPENED, NOT_INSTALLED, FAILED }
+enum class MessageOpenResult {
+    /** Conversa aberta com o texto pronto; o envio fica com o toque da usuária. */
+    OPENED,
+    /** O serviço de acessibilidade da Bela tocou em Enviar e a caixa de texto esvaziou (envio verificado). */
+    SENT,
+    /** Conversa aberta, mas o envio automático não aconteceu ou não foi confirmado. */
+    SEND_FAILED,
+    NOT_INSTALLED,
+    FAILED
+}
 
 /**
- * Abre a conversa do WhatsApp com o texto já escrito. O envio em si é sempre um toque da usuária
- * no botão Enviar: sem serviço de acessibilidade, nenhum app consegue apertar botões do WhatsApp.
+ * Abre a conversa do WhatsApp com o texto já escrito. Se o serviço de acessibilidade da Bela estiver
+ * ativado e [autoSend] for true, ele toca em Enviar (só no WhatsApp, só para este texto).
  */
 interface MessagingPort {
     fun isWhatsAppInstalled(): Boolean
-    fun openWhatsApp(phoneDigits: String, text: String): MessageOpenResult
+    /** O serviço de acessibilidade "Bela, envio de mensagens" está ativado nas configurações. */
+    fun isAutoSendEnabled(): Boolean
+    suspend fun openWhatsApp(phoneDigits: String, text: String, autoSend: Boolean): MessageOpenResult
+    /** Abre a tela de acessibilidade do Android para ativar o serviço. */
+    fun openAutoSendSettings(): Boolean
 }
 
 object NoMessaging : MessagingPort {
     override fun isWhatsAppInstalled() = false
-    override fun openWhatsApp(phoneDigits: String, text: String) = MessageOpenResult.NOT_INSTALLED
+    override fun isAutoSendEnabled() = false
+    override suspend fun openWhatsApp(phoneDigits: String, text: String, autoSend: Boolean) = MessageOpenResult.NOT_INSTALLED
+    override fun openAutoSendSettings() = false
 }
 
 // ---------------- Bíblia ----------------

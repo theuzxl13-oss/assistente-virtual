@@ -123,11 +123,16 @@ class ConversationEngineTest {
 
     private class FakeMessaging(var installed: Boolean = true) : MessagingPort {
         val opened = mutableListOf<Pair<String, String>>()
+        var autoSendEnabled = false
+        var autoSendResult = MessageOpenResult.SENT
+        var settingsOpened = false
         override fun isWhatsAppInstalled() = installed
-        override fun openWhatsApp(phoneDigits: String, text: String): MessageOpenResult {
+        override fun isAutoSendEnabled() = autoSendEnabled
+        override suspend fun openWhatsApp(phoneDigits: String, text: String, autoSend: Boolean): MessageOpenResult {
             opened += phoneDigits to text
-            return MessageOpenResult.OPENED
+            return if (autoSend) autoSendResult else MessageOpenResult.OPENED
         }
+        override fun openAutoSendSettings(): Boolean { settingsOpened = true; return true }
     }
 
     private class FakePrefs : PreferencesPort {
@@ -513,8 +518,34 @@ class ConversationEngineTest {
         assertEquals("O que você quer mandar para Ana Paula?", speech.spoken[0])
         assertEquals("Você quer enviar: Estou chegando. Para Ana Paula. Pode enviar? Se quiser mudar a mensagem, diga corrigir.", speech.spoken[1])
         assertEquals(listOf("5511966660001" to "Estou chegando"), messaging.opened)
-        assertTrue(speech.spoken.last().contains("toque no botão Enviar"))
+        assertTrue(speech.spoken.any { it.contains("toque no botão Enviar") })
         assertFalse(speech.spoken.any { it.contains("enviada") })   // nunca afirma que enviou
+    }
+
+    @Test
+    fun `com o servico ativado a Bela envia e confirma o envio`() = runTest {
+        messaging.autoSendEnabled = true
+        engine(FakeInput("mandar mensagem para a Ana dizendo Estou chegando", "pode")).runSession()
+        assertEquals(listOf("5511966660001" to "Estou chegando"), messaging.opened)
+        assertTrue(speech.spoken.contains("Vou enviar a mensagem para Ana Paula pelo WhatsApp."))
+        assertEquals("Mensagem enviada para Ana Paula.", speech.spoken.last())
+    }
+
+    @Test
+    fun `envio automatico que nao confirma nao diz enviada`() = runTest {
+        messaging.autoSendEnabled = true
+        messaging.autoSendResult = MessageOpenResult.SEND_FAILED
+        engine(FakeInput("mandar mensagem para a Ana dizendo oi", "pode")).runSession()
+        assertTrue(speech.spoken.last().startsWith("Abri a conversa com a mensagem pronta, mas não consegui confirmar o envio."))
+        assertFalse(speech.spoken.any { it.contains("enviada") })
+    }
+
+    @Test
+    fun `sem o servico avisa uma vez como ativar e abre a configuracao quando pedido`() = runTest {
+        engine(FakeInput("mandar mensagem para a Ana dizendo oi", "pode")).runSession()
+        assertTrue(speech.spoken.last().contains("ativar envio de mensagens"))
+        engine(FakeInput("ativar envio de mensagens")).runSession()
+        assertTrue(messaging.settingsOpened)
     }
 
     @Test

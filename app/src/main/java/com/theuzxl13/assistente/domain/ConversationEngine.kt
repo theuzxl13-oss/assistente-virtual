@@ -59,6 +59,7 @@ class ConversationEngine(
     /** Último trecho bíblico lido, para "explica", "próximo versículo", "próximo capítulo". */
     private var lastBible: BibleSession? = null
     private var bibleTranslationAnnounced = false
+    private var autoSendHintGiven = false
 
     private sealed class Pending(val question: String) {
         class ConfirmCall(val contact: Contact, question: String) : Pending(question)
@@ -416,6 +417,7 @@ class ConversationEngine(
         BelaIntent.HangUp -> hangUp()
         BelaIntent.WhoIsCalling -> whoIsCalling()
         is BelaIntent.SendMessage -> startMessage(intent.name, intent.text)
+        BelaIntent.EnableAutoSend -> enableAutoSend()
 
         is BelaIntent.PlayMedia -> playMedia(intent.query)
         BelaIntent.PauseMedia -> { media.pause(); say("Pedi para pausar."); Next.END }
@@ -724,20 +726,56 @@ class ConversationEngine(
         )
     )
 
-    /** Abre a conversa com o texto pronto. Não diz "enviada": quem envia é o toque dela no botão Enviar. */
+    /**
+     * Com o serviço de acessibilidade ativado, a Bela envia e só diz "enviada" depois de verificar.
+     * Sem ele, abre a conversa com o texto pronto e o envio é o toque dela no botão Enviar.
+     */
     private suspend fun sendMessage(contact: Contact, text: String): Next {
         val number = PhoneNumbers.forWhatsApp(contact.number)
             ?: return fail("O número de ${contact.name} está sem o DDD na agenda, então não consigo abrir a conversa no WhatsApp.")
+        val autoSend = messaging.isAutoSendEnabled()
         say(
-            "Vou abrir a conversa com ${contact.name} no WhatsApp, com a mensagem já escrita. " +
+            if (autoSend) "Vou enviar a mensagem para ${contact.name} pelo WhatsApp."
+            else "Vou abrir a conversa com ${contact.name} no WhatsApp, com a mensagem já escrita. " +
                 "Para enviar, toque no botão Enviar, no canto de baixo, à direita da tela."
         )
         setState(ConversationState.EXECUTANDO_ACAO)
-        return when (messaging.openWhatsApp(number, text)) {
-            MessageOpenResult.OPENED -> Next.END
+        return when (messaging.openWhatsApp(number, text, autoSend)) {
+            MessageOpenResult.SENT -> { say("Mensagem enviada para ${contact.name}."); Next.END }
+            MessageOpenResult.SEND_FAILED -> {
+                say(
+                    "Abri a conversa com a mensagem pronta, mas não consegui confirmar o envio. " +
+                        "Toque no botão Enviar, no canto de baixo, à direita da tela."
+                )
+                Next.END
+            }
+            MessageOpenResult.OPENED -> {
+                if (!autoSendHintGiven) {
+                    autoSendHintGiven = true
+                    say(
+                        "Se quiser que eu envie sozinha, peça para alguém ativar o serviço Bela nas configurações de " +
+                            "acessibilidade. Diga: ativar envio de mensagens."
+                    )
+                }
+                Next.END
+            }
             MessageOpenResult.NOT_INSTALLED -> fail("O WhatsApp não está instalado neste celular.")
             MessageOpenResult.FAILED -> fail("Não consegui abrir o WhatsApp.")
         }
+    }
+
+    private suspend fun enableAutoSend(): Next {
+        if (messaging.isAutoSendEnabled()) {
+            say("O envio automático de mensagens já está ativado.")
+            return Next.LISTEN
+        }
+        say(
+            "Vou abrir as configurações de acessibilidade. Lá, entre em Apps instalados ou Serviços baixados, escolha " +
+                "Bela, envio de mensagens, e ative. Se a opção estiver bloqueada, abra as informações do aplicativo Bela, " +
+                "toque nos três pontinhos e em Permitir configurações restritas. Pode ser bom ter alguém para ajudar."
+        )
+        if (!messaging.openAutoSendSettings()) return fail("Não consegui abrir as configurações de acessibilidade.")
+        return Next.END
     }
 
     // ------------------------------------------------------------------ mídia

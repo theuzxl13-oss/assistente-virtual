@@ -119,9 +119,18 @@ para que serve a permissão.
 | `READ_CALL_LOG` | receber o número de quem está ligando | etapa "ligações" |
 | `INTERNET`, `ACCESS_NETWORK_STATE` | pesquisa, YouTube, reconhecimento online; checar conexão | automáticas (não perigosas) |
 
-**Não usadas:** serviço de acessibilidade, sobreposição de tela, captura de tela, leitor de
-notificações e administrador do dispositivo. Essas são as permissões que fazem apps de banco
-bloquearem o celular, e a Bela não precisa de nenhuma delas.
+**Não usadas:** sobreposição de tela, captura de tela, leitor de notificações e administrador do
+dispositivo.
+
+**Serviço de acessibilidade opcional** (`messaging/WhatsAppSendService.kt`, decisão do responsável
+em 03/11/2026, ciente do risco com apps de banco): só para tocar em Enviar no WhatsApp.
+- `packageNames="com.whatsapp,com.whatsapp.w4b"`: não recebe eventos de nenhum outro app.
+- Só age com um pedido armado (`WhatsAppAutoSend`) logo depois da confirmação por voz, por 12 s,
+  e só se a caixa de texto tiver exatamente a mensagem confirmada.
+- O envio só é anunciado depois de verificar que a caixa de texto esvaziou; senão a Bela pede o
+  toque em Enviar.
+- Não registra nem guarda o conteúdo da tela. `isAccessibilityTool="true"`.
+- Risco conhecido: apps de banco podem voltar a bloquear o celular com ele ativado.
 
 ## 6. O que depende de internet
 

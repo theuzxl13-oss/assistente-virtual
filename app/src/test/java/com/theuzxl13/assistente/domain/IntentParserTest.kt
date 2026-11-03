@@ -149,6 +149,8 @@ class IntentParserTest {
         assertEquals(BelaIntent.SendMessage("pedro", null), parse("escreve pro Pedro"))
         assertEquals(BelaIntent.SendMessage("", null), parse("quero mandar uma mensagem"))
         assertEquals(BelaIntent.Yes, parse("pode enviar"))
+        assertEquals(BelaIntent.EnableAutoSend, parse("Bela, ativar envio de mensagens"))
+        assertEquals(BelaIntent.EnableAutoSend, parse("ativa o envio automático"))
         // Não confunde com outros pedidos.
         assertTrue(parse("mandar o louvor para a Maria") !is BelaIntent.SendMessage)
     }

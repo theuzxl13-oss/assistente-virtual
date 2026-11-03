@@ -28,6 +28,7 @@ object IntentParser {
             CANCEL.matches(s) -> BelaIntent.Cancel
             REPEAT.matches(s) -> BelaIntent.Repeat
             NOT_UNDERSTOOD.containsMatchIn(s) -> BelaIntent.NotUnderstood
+            ENABLE_AUTO_SEND.matches(s) -> BelaIntent.EnableAutoSend
             EXPLAIN.matches(s) -> BelaIntent.Explain
             NEXT_CHAPTER.matches(s) -> BelaIntent.NextChapter
             SLOWER.containsMatchIn(s) -> BelaIntent.SpeakSlower
@@ -197,6 +198,9 @@ object IntentParser {
     )
     private val DETAILS = Regex(
         "$POLITE(?:mais detalhes|detalhes|leia tudo|le tudo|leitura completa|a leitura completa|completa|tudo|leia mais|fala mais|fale mais|quero saber mais|continue lendo|continua lendo|(?:leia |le |ler )?o capitulo(?: inteiro| todo| completo)?|capitulo (?:inteiro|todo|completo))(?: por favor)?"
+    )
+    private val ENABLE_AUTO_SEND = Regex(
+        "$POLITE(?:ativ(?:a|e|ar)|lig(?:a|ue|ar)|configur(?:a|e|ar)) (?:o )?(?:envio (?:automatico )?(?:de )?(?:mensage(?:m|ns)|whatsapp|zap)|envio automatico)"
     )
     private val EXPLAIN = Regex(
         "$POLITE(?:me )?(?:explic(?:a|ar)|explique)(?: (?:pra|para) mim)?(?: (?:isso|esse versiculo|este versiculo|o versiculo|esse texto|essa passagem|esse capitulo|ele))?(?: (?:pra|para) mim)?|o que (?:isso |esse versiculo |este versiculo |essa passagem |ele )?(?:significa|quer dizer)(?: isso| esse versiculo| este versiculo| essa passagem| esse texto)?|qual (?:e )?o significado(?: disso| desse versiculo| dessa passagem)?|(?:quero|uma) explicacao"

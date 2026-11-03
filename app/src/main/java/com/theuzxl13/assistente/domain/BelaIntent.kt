@@ -39,6 +39,8 @@ sealed class BelaIntent {
     // Mensagens
     /** "Mandar mensagem para a Maria" (o texto pode vir junto: "... dizendo estou chegando"). */
     data class SendMessage(val name: String, val text: String?) : BelaIntent()
+    /** "Ativar envio de mensagens": abre a tela para ativar o serviço de acessibilidade da Bela. */
+    data object EnableAutoSend : BelaIntent()
 
     // Mídia
     data class PlayMedia(val query: String) : BelaIntent()

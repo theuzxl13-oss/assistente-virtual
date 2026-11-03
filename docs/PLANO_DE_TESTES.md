@@ -85,6 +85,10 @@ depois ligado**.
 - [ ] "Mande mensagem pra [contato] dizendo [texto]" já com o texto; "corrigir" pede a mensagem de novo; "não" cancela.
 - [ ] Mensagem ditada "obrigada" ou "repete amanhã" vira o texto (não é tratada como comando).
 - [ ] Contato salvo sem DDD: a Bela avisa e não abre conversa errada.
+- [ ] "Ativar envio de mensagens" abre a tela de acessibilidade; com "Permitir configurações restritas", o serviço "Bela, envio de mensagens" ativa.
+- [ ] Com o serviço ativo: a mensagem sai sozinha e a Bela diz "Mensagem enviada" só depois; conferir no WhatsApp que foi para a pessoa certa.
+- [ ] Com o serviço ativo: abrir o WhatsApp à mão e digitar algo — a Bela **não** envia nada (sem pedido armado).
+- [ ] Com o serviço ativo: abrir os apps de banco e anotar se algum bloqueia ou avisa.
 - [ ] `adb logcat -s BelaPesquisa` mostra a etapa e o código do erro, sem a pergunta nem a chave.
 - [ ] Pergunta de acompanhamento ("e sem glúten?") usa o contexto.
 - [ ] Sem internet: pesquisa e música avisam; hora, ligação e apps funcionam.

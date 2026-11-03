@@ -14,7 +14,7 @@ botões pequenos.
 | "Ligue para o Matheus" | procura na agenda, confirma ("Encontrei Matheus Marcelino. Quer que eu ligue?") ou lê as opções se houver nomes repetidos, e liga |
 | "Quem está me ligando?" · "Atender" · "Recusar" · "Desligue" | diz o nome (ou "número que não está na agenda, terminado em…"), atende, recusa ou desliga e confirma |
 | "Ligue para o SAMU / polícia / bombeiros" | confirma e liga para 192, 190 ou 193 |
-| "Mandar mensagem para a Maria" (ou "... dizendo estou chegando") | pergunta a mensagem, lê de volta para confirmar ("diga corrigir para mudar") e abre a conversa no WhatsApp com o texto pronto; **o toque final em Enviar é dela** (sem serviço de acessibilidade, nenhum app consegue apertar o botão do WhatsApp), e a Bela diz onde fica o botão |
+| "Mandar mensagem para a Maria" (ou "... dizendo estou chegando") | pergunta a mensagem, lê de volta para confirmar ("diga corrigir para mudar") e abre a conversa no WhatsApp com o texto pronto. Com o serviço opcional **"Bela, envio de mensagens"** ativado, a Bela toca em Enviar e só diz "mensagem enviada" depois de verificar; sem ele, ela diz onde fica o botão Enviar. Ative com "Bela, ativar envio de mensagens" |
 | "Quero ouvir Gabriela Rocha" · "Toque um louvor" | busca no YouTube, lê três títulos, você escolhe ("o segundo") e ele abre tocando |
 | "Pause" · "Continue" · "Pare a música" · "Quero ouvir outro" | controla o player pelas teclas de mídia do Android |
 | "Pesquise uma receita de bolo de cenoura" · qualquer pergunta | pesquisa no Google, lê um resumo, diz a fonte e oferece mais detalhes |
@@ -110,7 +110,13 @@ que confere a quantidade de capítulos de todos os 66 livros. Ver `app/src/main/
   pesquisa vão para a API do Gemini (Google). Os contatos são lidos só no celular.
 - O número de quem está ligando fica guardado só durante a chamada e é apagado ao desligar.
 - A Bela nunca pede senhas, códigos ou dados bancários.
-- Sem serviço de acessibilidade, sobreposição de tela, captura de tela ou leitura de notificações: são as
-  permissões que fazem apps de banco bloquearem o celular.
+- Sem sobreposição de tela, captura de tela ou leitura de notificações.
+- **Serviço de acessibilidade opcional ("Bela, envio de mensagens"):** existe só para tocar em Enviar
+  no WhatsApp. Ele recebe eventos apenas do WhatsApp, só age logo depois de a usuária confirmar a
+  mensagem por voz, confere se o texto na caixa é o confirmado e não guarda nada da tela.
+  **Ativá-lo pode fazer apps de banco voltarem a bloquear o celular**: foi o motivo de a versão antiga
+  ter removido a acessibilidade. Desativar: Configurações → Acessibilidade → Bela, envio de mensagens.
+- Instalado fora da Play Store, o Android 13+ bloqueia a ativação de serviços de acessibilidade: abra
+  Configurações → Apps → Bela → ⋮ → **Permitir configurações restritas** antes de ativar.
 - **Atenção:** nos APKs de teste, as chaves de API ficam dentro do APK. Não distribua o APK para
   outras pessoas. Para a Play, elas vão para um backend (veja `docs/GOOGLE_PLAY.md`).

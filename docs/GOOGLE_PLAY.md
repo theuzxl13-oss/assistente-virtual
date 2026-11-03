@@ -19,8 +19,10 @@ Hoje o app é feito para testes pessoais (APK instalado direto). Para publicar, 
 - **`ANSWER_PHONE_CALLS`**, **`CALL_PHONE`**, **`READ_CONTACTS`**, **`RECORD_AUDIO`**: perigosas,
   mas sem formulário especial. Precisam aparecer na política de privacidade e na seção
   "Segurança dos dados".
-- **Não** usar serviço de acessibilidade (a Play exige justificativa e revisão), sobreposição de
-  tela nem leitura de notificações.
+- **Serviço de acessibilidade** (envio de mensagens no WhatsApp): a Play exige a declaração de uso
+  da API de acessibilidade, vídeo do fluxo e justificativa. O app é para pessoas cegas e o serviço
+  é declarado com `isAccessibilityTool`, mas a aprovação não é garantida; alternativa é publicar sem
+  ele (a usuária toca em Enviar). Não usar sobreposição de tela nem leitura de notificações.
 
 ## 3. Documentos e formulários
 - Política de privacidade pública (URL), explicando que:

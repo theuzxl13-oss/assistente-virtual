@@ -17,4 +17,6 @@
 
     <string name="voice_missing">A voz em português não está instalada. Instale os \"Serviços de fala do Google\" e o idioma Português (Brasil) e abra a Bela de novo.</string>
     <string name="share_label">Ler com a Bela</string>
+    <string name="auto_send_service_label">Bela, envio de mensagens</string>
+    <string name="auto_send_service_description">Permite que a Bela toque no botão Enviar do WhatsApp depois que você confirmar a mensagem por voz. O serviço só funciona dentro do WhatsApp, só age logo depois da sua confirmação, confere se o texto é o que você ditou e não guarda nada do que aparece na tela.</string>
 </resources>
